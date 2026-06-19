@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 
-const STORAGE_ENV = import.meta.env.VITE_STORAGE_ENV || 'develop';
+const STORAGE_ENV = process.env.NEXT_PUBLIC_STORAGE_ENV || process.env.VITE_STORAGE_ENV || 'develop';
 
 export interface UploadResponse {
     publicUrl: string;
