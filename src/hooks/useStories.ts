@@ -47,13 +47,9 @@ export function useStories() {
   const selectedChannel = channels.find((c) => c.id === selectedChannelId);
   const items = selectedChannel?.story_items || [];
 
-  // Automatically select first channel on load or page switch
+  // Automatically reset selection if the selected channel is no longer present in the list
   useEffect(() => {
-    if (channels.length > 0) {
-      if (!selectedChannelId || !channels.some((c) => c.id === selectedChannelId)) {
-        setSelectedChannelId(channels[0].id);
-      }
-    } else {
+    if (selectedChannelId && !channels.some((c) => c.id === selectedChannelId)) {
       setSelectedChannelId(undefined);
     }
   }, [channels, selectedChannelId]);

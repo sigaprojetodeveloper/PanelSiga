@@ -275,6 +275,99 @@ function FileUploadZone({
   );
 }
 
+interface HistoricalBannerCardProps {
+  banner: any;
+  todayStr: string;
+  onToggleStatus: (banner: any) => void;
+  onEdit: (banner: any) => void;
+  onDelete: (id: string) => void;
+}
+
+function HistoricalBannerCard({
+  banner,
+  todayStr,
+  onToggleStatus,
+  onEdit,
+  onDelete
+}: HistoricalBannerCardProps) {
+  const isExpired = banner.status === 'expired' || banner.data_expiracao < todayStr;
+  const title = banner.title || 'Sem título';
+  const subtitle = banner.subtitle || 'Sem subtítulo';
+  const linkLabel = banner.link_label || 'Ver Mais';
+  const toggleText = banner.status === 'active' ? 'Desativar' : 'Reativar';
+
+  let badgeClass = 'badge-warning';
+  let badgeBg: string | undefined = undefined;
+  let badgeText = 'Inativo (Fora do Top 5)';
+  if (isExpired) {
+    badgeClass = 'badge-danger';
+    badgeBg = '#6b7280';
+    badgeText = 'Expirado';
+  }
+
+  return (
+    <div
+      style={{
+        backgroundColor: 'var(--bg-card)',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--border-light)',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        opacity: 0.75
+      }}
+    >
+      <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', backgroundColor: '#f0f0f0' }}>
+        <img
+          src={banner.image_url}
+          alt={title}
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+        <span className={`badge ${badgeClass}`} style={{ position: 'absolute', top: '10px', right: '10px', backgroundColor: badgeBg }}>
+          {badgeText}
+        </span>
+      </div>
+      <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <h4 style={{ fontSize: '15px', fontWeight: 600 }}>{title}</h4>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{subtitle}</p>
+        {banner.link_url && (
+          <div style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)' }}>
+            <LinkIcon size={12} />
+            <a href={banner.link_url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>
+              {linkLabel}
+            </a>
+          </div>
+        )}
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <Calendar size={12} /> Expira em: {new Date(banner.data_expiracao).toLocaleDateString()}
+        </div>
+      </div>
+      <div style={{ display: 'flex', borderTop: '1px solid var(--border-light)' }}>
+        <button
+          onClick={() => onToggleStatus(banner)}
+          style={{ flex: 1, padding: '10px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', fontSize: '12px', cursor: 'pointer', fontWeight: 600 }}
+        >
+          {toggleText}
+        </button>
+        <button
+          onClick={() => onEdit(banner)}
+          style={{ padding: '10px 16px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', cursor: 'pointer', color: 'var(--text-muted)' }}
+          title="Editar"
+        >
+          <Edit2 size={14} />
+        </button>
+        <button
+          onClick={() => onDelete(banner.id)}
+          style={{ padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}
+          title="Excluir"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface DashboardProps {
   onLogout: () => void;
   adminUsername: string;
@@ -1139,10 +1232,26 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px' }}>
-                  <button className="btn btn-secondary" onClick={() => setAddChannelModalOpen(true)}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setNewChannelName('');
+                      setNewChannelAvatar('');
+                      setNewChannelDestaque(false);
+                      setNewChannelScope('national');
+                      setNewChannelState('');
+                      setNewChannelCity('');
+                      setAddChannelModalOpen(true);
+                    }}
+                  >
                     <Plus size={16} /> Novo Canal
                   </button>
-                  <button className="btn btn-primary" onClick={handleOpenAddStory}>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleOpenAddStory}
+                    disabled={!storyHook.selectedChannelId}
+                    title={!storyHook.selectedChannelId ? "Selecione um canal antes de criar um story" : ""}
+                  >
                     <Plus size={16} /> Novo Story Item
                   </button>
                 </div>
@@ -1167,7 +1276,13 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                         return (
                           <div
                             key={ch.id}
-                            onClick={() => storyHook.setSelectedChannelId(ch.id)}
+                            onClick={() => {
+                              if (storyHook.selectedChannelId === ch.id) {
+                                storyHook.setSelectedChannelId(undefined);
+                              } else {
+                                storyHook.setSelectedChannelId(ch.id);
+                              }
+                            }}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
@@ -1308,7 +1423,9 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 {/* Story Items Grid */}
                 <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
                   <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Stories Publicados</h3>
-                  {storyHook.items.length === 0 ? (
+                  {!storyHook.selectedChannelId ? (
+                    <p style={{ color: 'var(--text-muted)' }}>Selecione um canal na lista para visualizar seus stories.</p>
+                  ) : storyHook.items.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)' }}>Nenhum story publicado neste filtro.</p>
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '16px' }}>
@@ -1710,71 +1827,16 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
                   return (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-                      {historicalBanners.map((banner) => {
-                        const isExpired = banner.status === 'expired' || banner.data_expiracao < todayStr;
-                        return (
-                          <div
-                            key={banner.id}
-                            style={{
-                              backgroundColor: 'var(--bg-card)',
-                              borderRadius: 'var(--radius-md)',
-                              border: '1px solid var(--border-light)',
-                              overflow: 'hidden',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              opacity: 0.75
-                            }}
-                          >
-                            <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', backgroundColor: '#f0f0f0' }}>
-                              <img
-                                src={banner.image_url}
-                                alt={banner.title || 'Banner'}
-                                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-                              />
-                              <span className={`badge ${isExpired ? 'badge-danger' : 'badge-warning'}`} style={{ position: 'absolute', top: '10px', right: '10px', backgroundColor: isExpired ? '#6b7280' : undefined }}>
-                                {isExpired ? 'Expirado' : 'Inativo (Fora do Top 5)'}
-                              </span>
-                            </div>
-                            <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                              <h4 style={{ fontSize: '15px', fontWeight: 600 }}>{banner.title || 'Sem título'}</h4>
-                              <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{banner.subtitle || 'Sem subtítulo'}</p>
-                              {banner.link_url && (
-                                <div style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)' }}>
-                                  <LinkIcon size={12} />
-                                  <a href={banner.link_url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>
-                                    {banner.link_label || 'Ver Mais'}
-                                  </a>
-                                </div>
-                              )}
-                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <Calendar size={12} /> Expira em: {new Date(banner.data_expiracao).toLocaleDateString()}
-                              </div>
-                            </div>
-                            <div style={{ display: 'flex', borderTop: '1px solid var(--border-light)' }}>
-                              <button
-                                onClick={() => handleToggleBannerStatus(banner)}
-                                style={{ flex: 1, padding: '10px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', fontSize: '12px', cursor: 'pointer', fontWeight: 600 }}
-                              >
-                                {banner.status === 'active' ? 'Desativar' : 'Reativar'}
-                              </button>
-                              <button
-                                onClick={() => handleOpenEditBanner(banner)}
-                                style={{ padding: '10px 16px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', cursor: 'pointer', color: 'var(--text-muted)' }}
-                                title="Editar"
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                              <button
-                                onClick={() => bannersHook.deleteBanner(banner.id)}
-                                style={{ padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}
-                                title="Excluir"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {historicalBanners.map((banner) => (
+                        <HistoricalBannerCard
+                          key={banner.id}
+                          banner={banner}
+                          todayStr={todayStr}
+                          onToggleStatus={handleToggleBannerStatus}
+                          onEdit={handleOpenEditBanner}
+                          onDelete={bannersHook.deleteBanner}
+                        />
+                      ))}
                     </div>
                   );
                 })()}
@@ -1932,8 +1994,13 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 <input type="text" className="input-field" value={newChannelName} onChange={(e) => setNewChannelName(e.target.value)} placeholder="Ex: Siga Construtora" required />
               </div>
               <div className="form-group">
-                <label>URL do Avatar</label>
-                <input type="text" className="input-field" value={newChannelAvatar} onChange={(e) => setNewChannelAvatar(e.target.value)} placeholder="https://exemplo.com/avatar.jpg" />
+                <label>Avatar do Canal (Apenas Imagem)</label>
+                <FileUploadZone
+                  mediaUrl={newChannelAvatar}
+                  setMediaUrl={setNewChannelAvatar}
+                  allowedTypes={['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']}
+                  folder="avatars"
+                />
               </div>
               
               <div className="form-group">
@@ -2014,7 +2081,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
             <form onSubmit={handleSaveStoryItem}>
               <div className="form-group">
                 <label>Canal Vinculado</label>
-                <select className="select-field" value={newStoryChannelId} onChange={(e) => setNewStoryChannelId(e.target.value)} required>
+                <select className="select-field" value={newStoryChannelId} onChange={(e) => setNewStoryChannelId(e.target.value)} required disabled>
                   <option value="">Selecione o canal</option>
                   {storyHook.channels.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>

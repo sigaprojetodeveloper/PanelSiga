@@ -89,27 +89,8 @@ export const storiesService = {
       .from('story_channels')
       .select('*, story_items(*)', { count: 'exact' });
 
-    if (filter === 'active') {
-      query = query.eq('is_active', true);
-    } else if (filter === 'inactive') {
-      query = query.eq('is_active', false);
-    }
-
-    if (state === 'national') {
-      query = query.is('state', null);
-    } else if (state && state !== 'all') {
-      query = query.eq('state', state);
-    }
-
-    if (city) {
-      query = query.ilike('city', `%${city}%`);
-    }
-
-    if (sort === 'newest') {
-      query = query.order('created_at', { ascending: false });
-    } else if (sort === 'oldest') {
-      query = query.order('created_at', { ascending: true });
-    }
+    query = applyChannelFilters(query, filter, state, city);
+    query = applyChannelSorting(query, sort);
 
     // Order story_items inside the relation query
     query = query.order('created_at', { foreignTable: 'story_items', ascending: false });
@@ -221,3 +202,32 @@ export const storiesService = {
     }
   }
 };
+
+function applyChannelFilters(query: any, filter: string, state?: string, city?: string) {
+  let q = query;
+  if (filter === 'active') {
+    q = q.eq('is_active', true);
+  } else if (filter === 'inactive') {
+    q = q.eq('is_active', false);
+  }
+
+  if (state === 'national') {
+    q = q.is('state', null);
+  } else if (state && state !== 'all') {
+    q = q.eq('state', state);
+  }
+
+  if (city) {
+    q = q.ilike('city', `%${city}%`);
+  }
+  return q;
+}
+
+function applyChannelSorting(query: any, sort: string) {
+  if (sort === 'newest') {
+    return query.order('created_at', { ascending: false });
+  } else if (sort === 'oldest') {
+    return query.order('created_at', { ascending: true });
+  }
+  return query;
+}
