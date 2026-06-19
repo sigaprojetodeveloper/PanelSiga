@@ -35,11 +35,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
       if (dbError) {
         console.error('Supabase DB error:', dbError);
-        // Fallback to default user
-        if (username === 'SigaAdmin' && password === 'Entrar.Siga.123') {
-          onLoginSuccess(username);
-          return;
-        }
         setError(`Erro de banco de dados: ${dbError.message}`);
         return;
       }
@@ -47,20 +42,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       if (data) {
         onLoginSuccess(data.username);
       } else {
-        // Fallback to default user check in case table wasn't seeded or for offline usage
-        if (username === 'SigaAdmin' && password === 'Entrar.Siga.123') {
-          onLoginSuccess(username);
-        } else {
-          setError('Usuário ou senha incorretos.');
-        }
+        setError('Usuário ou senha incorretos.');
       }
     } catch (err: any) {
       console.error('Unexpected login error:', err);
-      if (username === 'SigaAdmin' && password === 'Entrar.Siga.123') {
-        onLoginSuccess(username);
-      } else {
-        setError(err.message || 'Erro inesperado ao realizar login.');
-      }
+      setError(err.message || 'Erro inesperado ao realizar login.');
     } finally {
       setLoading(false);
     }
