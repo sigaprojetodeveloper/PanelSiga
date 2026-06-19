@@ -63,6 +63,8 @@ export interface Database {
           avatar_url: string | null;
           is_destaque: boolean;
           is_active: boolean;
+          state: string | null;
+          city: string | null;
           created_at: string;
         };
         Insert: Omit<Database['public']['Tables']['story_channels']['Row'], 'id' | 'created_at'>;

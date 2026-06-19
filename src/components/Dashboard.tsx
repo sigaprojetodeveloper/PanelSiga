@@ -30,6 +30,36 @@ import {
   Link as LinkIcon
 } from 'lucide-react';
 
+const ESTADOS_BRASIL = [
+  { value: 'AC', label: 'Acre' },
+  { value: 'AL', label: 'Alagoas' },
+  { value: 'AP', label: 'Amapá' },
+  { value: 'AM', label: 'Amazonas' },
+  { value: 'BA', label: 'Bahia' },
+  { value: 'CE', label: 'Ceará' },
+  { value: 'DF', label: 'Distrito Federal' },
+  { value: 'ES', label: 'Espírito Santo' },
+  { value: 'GO', label: 'Goiás' },
+  { value: 'MA', label: 'Maranhão' },
+  { value: 'MT', label: 'Mato Grosso' },
+  { value: 'MS', label: 'Mato Grosso do Sul' },
+  { value: 'MG', label: 'Minas Gerais' },
+  { value: 'PA', label: 'Pará' },
+  { value: 'PB', label: 'Paraíba' },
+  { value: 'PR', label: 'Paraná' },
+  { value: 'PE', label: 'Pernambuco' },
+  { value: 'PI', label: 'Piauí' },
+  { value: 'RJ', label: 'Rio de Janeiro' },
+  { value: 'RN', label: 'Rio Grande do Norte' },
+  { value: 'RS', label: 'Rio Grande do Sul' },
+  { value: 'RO', label: 'Rondônia' },
+  { value: 'RR', label: 'Roraima' },
+  { value: 'SC', label: 'Santa Catarina' },
+  { value: 'SP', label: 'São Paulo' },
+  { value: 'SE', label: 'Sergipe' },
+  { value: 'TO', label: 'Tocantins' }
+];
+
 // Link helpers
 const formatWhatsAppNumber = (val: string) => {
   const digits = val.replace(/\D/g, '');
@@ -280,6 +310,9 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelAvatar, setNewChannelAvatar] = useState('');
   const [newChannelDestaque, setNewChannelDestaque] = useState(false);
+  const [newChannelScope, setNewChannelScope] = useState<'national' | 'state' | 'city'>('national');
+  const [newChannelState, setNewChannelState] = useState('');
+  const [newChannelCity, setNewChannelCity] = useState('');
 
   // Add/Edit story item state
   const [editStoryId, setEditStoryId] = useState('');
@@ -330,6 +363,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const blockedUsersCount = userHook.users.filter(u => u.status === 'blocked').length;
   const pendingReportsCount = reportHook.reports.filter(r => r.status === 'new').length;
   const activeChannelsCount = storyHook.channels.filter(c => c.is_active).length;
+  const selectedChannel = storyHook.channels.find((c: any) => c.id === storyHook.selectedChannelId);
 
   const handleEditUserClick = (u: any) => {
     setEditUserId(u.id);
@@ -358,17 +392,22 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       name: newChannelName,
       avatar_url: newChannelAvatar || null,
       is_destaque: newChannelDestaque,
-      is_active: true
+      is_active: true,
+      state: newChannelScope !== 'national' ? newChannelState || null : null,
+      city: newChannelScope === 'city' ? newChannelCity || null : null
     });
     setNewChannelName('');
     setNewChannelAvatar('');
     setNewChannelDestaque(false);
+    setNewChannelScope('national');
+    setNewChannelState('');
+    setNewChannelCity('');
     setAddChannelModalOpen(false);
   };
 
   const handleOpenAddStory = () => {
     setEditStoryId('');
-    setNewStoryChannelId('');
+    setNewStoryChannelId(storyHook.selectedChannelId || '');
     setNewStoryMediaUrl('');
     setNewStoryMediaType('image');
     setNewStoryLinkType('none');
@@ -1038,16 +1077,63 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
                 <div className="filters-group">
                   <div className="filter-control">
-                    <label>Filtrar por Canal</label>
+                    <label>Filtro Canais</label>
                     <select
                       className="select-field"
-                      value={storyHook.selectedChannelId || ''}
-                      onChange={(e) => storyHook.setSelectedChannelId(e.target.value || undefined)}
+                      value={storyHook.filter}
+                      onChange={(e) => {
+                        storyHook.setFilter(e.target.value as any);
+                        storyHook.setPage(1);
+                      }}
                     >
-                      <option value="">Todos os canais</option>
-                      {storyHook.channels.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
+                      <option value="all">Todos os canais</option>
+                      <option value="active">Canais ativos</option>
+                      <option value="inactive">Canais inativos</option>
+                    </select>
+                  </div>
+                  <div className="filter-control">
+                    <label>Filtrar por UF</label>
+                    <select
+                      className="select-field"
+                      value={storyHook.stateFilter}
+                      onChange={(e) => {
+                        storyHook.setStateFilter(e.target.value);
+                        storyHook.setPage(1);
+                      }}
+                    >
+                      <option value="all">Todos (Nacional/UF)</option>
+                      <option value="national">Apenas Nacional</option>
+                      {ESTADOS_BRASIL.map(uf => (
+                        <option key={uf.value} value={uf.value}>{uf.value} - {uf.label}</option>
                       ))}
+                    </select>
+                  </div>
+                  <div className="filter-control">
+                    <label>Buscar Cidade</label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      placeholder="Ex: São Paulo"
+                      style={{ height: '36px', fontSize: '14px' }}
+                      value={storyHook.cityFilter}
+                      onChange={(e) => {
+                        storyHook.setCityFilter(e.target.value);
+                        storyHook.setPage(1);
+                      }}
+                    />
+                  </div>
+                  <div className="filter-control">
+                    <label>Ordenar Canais</label>
+                    <select
+                      className="select-field"
+                      value={storyHook.sort}
+                      onChange={(e) => {
+                        storyHook.setSort(e.target.value as any);
+                        storyHook.setPage(1);
+                      }}
+                    >
+                      <option value="newest">Mais novos</option>
+                      <option value="oldest">Mais antigos</option>
                     </select>
                   </div>
                 </div>
@@ -1065,29 +1151,34 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               {/* Split screen: channels on left, stories on right */}
               <div style={{ display: 'grid', gridTemplateColumns: '0.85fr 1.15fr', gap: '24px' }}>
                 {/* Channels List */}
-                <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
+                <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column' }}>
                   <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Canais de Stories</h3>
                   {storyHook.channels.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)' }}>Nenhum canal criado.</p>
                   ) : (
-                    <div style={{ display: 'flex', overflowX: 'hidden', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', overflowX: 'hidden', flexDirection: 'column', gap: '12px', flex: 1 }}>
                       {storyHook.channels.map((ch) => {
-                        const activeCount = storyHook.items.filter(item => 
-                          item.channel_id === ch.id && 
+                        const activeCount = (ch.story_items || []).filter((item: any) => 
                           item.status === 'active' && 
                           item.data_expiracao >= new Date().toISOString().split('T')[0]
                         ).length;
+                        const isSelected = ch.id === storyHook.selectedChannelId;
 
                         return (
                           <div
                             key={ch.id}
+                            onClick={() => storyHook.setSelectedChannelId(ch.id)}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'space-between',
                               padding: '12px',
-                              backgroundColor: 'var(--bg-app)',
-                              borderRadius: 'var(--radius-sm)'
+                              backgroundColor: isSelected ? 'rgba(239, 68, 68, 0.08)' : 'var(--bg-app)',
+                              borderLeft: isSelected ? '4px solid var(--primary)' : '4px solid transparent',
+                              borderRadius: 'var(--radius-sm)',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              border: isSelected ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid transparent'
                             }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1099,14 +1190,49 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                 </div>
                               )}
                               <div>
-                                <span style={{ fontWeight: 600, fontSize: '14px' }}>{ch.name}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                                  <span style={{ fontWeight: 600, fontSize: '14px', color: isSelected ? 'var(--primary)' : 'inherit' }}>{ch.name}</span>
+                                  {ch.state ? (
+                                    <span 
+                                      style={{ 
+                                        fontSize: '9px', 
+                                        padding: '2px 6px', 
+                                        borderRadius: '4px',
+                                        backgroundColor: 'rgba(239, 68, 68, 0.1)', 
+                                        color: 'var(--primary)',
+                                        fontWeight: 600
+                                      }}
+                                    >
+                                      {ch.city ? `${ch.city}/${ch.state}` : ch.state}
+                                    </span>
+                                  ) : (
+                                    <span 
+                                      style={{ 
+                                        fontSize: '9px', 
+                                        padding: '2px 6px', 
+                                        borderRadius: '4px',
+                                        backgroundColor: 'var(--bg-app)', 
+                                        color: 'var(--text-muted)',
+                                        border: '1px solid var(--border-light)',
+                                        fontWeight: 600
+                                      }}
+                                    >
+                                      Nacional
+                                    </span>
+                                  )}
+                                </div>
                                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
                                   Ativos: <strong style={{ color: activeCount > 0 ? 'var(--success)' : 'inherit' }}>{activeCount}</strong>
+                                  {ch.is_active ? (
+                                    <span className="badge badge-success" style={{ fontSize: '8px', padding: '1px 4px', marginLeft: '6px' }}>Ativo</span>
+                                  ) : (
+                                    <span className="badge badge-secondary" style={{ fontSize: '8px', padding: '1px 4px', marginLeft: '6px', backgroundColor: '#6b7280', color: 'white' }}>Inativo</span>
+                                  )}
                                 </div>
                               </div>
                             </div>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} onClick={(e) => e.stopPropagation()}>
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                 <span style={{ fontSize: '9px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Destaque</span>
                                 <div 
@@ -1141,6 +1267,42 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       })}
                     </div>
                   )}
+
+                  {/* Channels Pagination */}
+                  {storyHook.channels.length > 0 && (
+                    <div className="pagination" style={{ marginTop: '16px', borderTop: '1px solid var(--border-light)', paddingTop: '16px', paddingBottom: '0' }}>
+                      <div className="pagination-info" style={{ fontSize: '12px' }}>
+                        Total: {storyHook.totalCount} canais
+                      </div>
+                      <div className="pagination-actions" style={{ gap: '4px' }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          disabled={storyHook.page === 1}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            storyHook.setPage(p => p - 1);
+                          }}
+                          style={{ padding: '4px 8px', fontSize: '11px' }}
+                        >
+                          Anterior
+                        </button>
+                        <span style={{ fontSize: '11px', display: 'flex', alignItems: 'center', padding: '0 4px' }}>
+                          Pág {storyHook.page}
+                        </span>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          disabled={storyHook.channels.length < 10}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            storyHook.setPage(p => p + 1);
+                          }}
+                          style={{ padding: '4px 8px', fontSize: '11px' }}
+                        >
+                          Próxima
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Story Items Grid */}
@@ -1150,7 +1312,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     <p style={{ color: 'var(--text-muted)' }}>Nenhum story publicado neste filtro.</p>
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '16px' }}>
-                      {storyHook.items.map((item) => {
+                      {storyHook.items.map((item: any) => {
                         const todayStr = new Date().toISOString().split('T')[0];
                         const isExpired = item.data_expiracao < todayStr;
 
@@ -1188,7 +1350,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
                             <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', flex: 1 }}>
                               <span style={{ fontSize: '12px', fontWeight: 600 }}>
-                                {item.story_channels?.name || 'Canal Desconhecido'}
+                                {selectedChannel?.name || 'Canal Desconhecido'}
                               </span>
                               {item.link_url && (
                                 <a href={item.link_url} target="_blank" rel="noreferrer" style={{ fontSize: '10px', color: 'var(--primary)', textDecoration: 'none', margin: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1773,6 +1935,59 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 <label>URL do Avatar</label>
                 <input type="text" className="input-field" value={newChannelAvatar} onChange={(e) => setNewChannelAvatar(e.target.value)} placeholder="https://exemplo.com/avatar.jpg" />
               </div>
+              
+              <div className="form-group">
+                <label>Abrangência do Canal</label>
+                <select 
+                  className="select-field" 
+                  value={newChannelScope} 
+                  onChange={(e) => {
+                    const val = e.target.value as any;
+                    setNewChannelScope(val);
+                    if (val === 'national') {
+                      setNewChannelState('');
+                      setNewChannelCity('');
+                    } else if (val === 'state') {
+                      setNewChannelCity('');
+                    }
+                  }}
+                >
+                  <option value="national">Nacional</option>
+                  <option value="state">Estadual (Apenas um Estado)</option>
+                  <option value="city">Municipal (Uma Cidade Específica)</option>
+                </select>
+              </div>
+
+              {newChannelScope !== 'national' && (
+                <div className="form-group">
+                  <label>Estado (UF)</label>
+                  <select 
+                    className="select-field" 
+                    value={newChannelState} 
+                    onChange={(e) => setNewChannelState(e.target.value)}
+                    required
+                  >
+                    <option value="">Selecione o Estado</option>
+                    {ESTADOS_BRASIL.map(uf => (
+                      <option key={uf.value} value={uf.value}>{uf.value} - {uf.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {newChannelScope === 'city' && (
+                <div className="form-group">
+                  <label>Nome da Cidade</label>
+                  <input 
+                    type="text" 
+                    className="input-field" 
+                    value={newChannelCity} 
+                    onChange={(e) => setNewChannelCity(e.target.value)} 
+                    placeholder="Ex: São Paulo" 
+                    required 
+                  />
+                </div>
+              )}
               <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
                 <input type="checkbox" id="destaque" checked={newChannelDestaque} onChange={(e) => setNewChannelDestaque(e.target.checked)} />
                 <label htmlFor="destaque">Destaque (Aparece em primeiro no app)</label>

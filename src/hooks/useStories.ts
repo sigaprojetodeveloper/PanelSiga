@@ -6,9 +6,15 @@ type Channel = Database['public']['Tables']['story_channels']['Row'];
 type StoryItem = Database['public']['Tables']['story_items']['Row'];
 
 export function useStories() {
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [items, setItems] = useState<any[]>([]);
+  const [channels, setChannels] = useState<any[]>([]);
   const [selectedChannelId, setSelectedChannelId] = useState<string | undefined>(undefined);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
+  const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [sort, setSort] = useState<'newest' | 'oldest'>('newest');
+  const [stateFilter, setStateFilter] = useState<string>('all');
+  const [cityFilter, setCityFilter] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -16,26 +22,46 @@ export function useStories() {
     setLoading(true);
     setError(null);
     try {
-      const channelData = await storiesService.getStoryChannels();
-      setChannels(channelData);
-
-      const itemsData = await storiesService.getStoryItems(selectedChannelId);
-      setItems(itemsData);
+      const { data, totalCount: count } = await storiesService.getStoryChannels({
+        page,
+        pageSize,
+        filter,
+        sort,
+        state: stateFilter,
+        city: cityFilter,
+      });
+      setChannels(data);
+      setTotalCount(count);
     } catch (err: any) {
       setError(err);
     } finally {
       setLoading(false);
     }
-  }, [selectedChannelId]);
+  }, [page, pageSize, filter, sort, stateFilter, cityFilter]);
 
   useEffect(() => {
     fetchChannelsAndItems();
   }, [fetchChannelsAndItems]);
 
+  // Derived state: items of the selected channel
+  const selectedChannel = channels.find((c) => c.id === selectedChannelId);
+  const items = selectedChannel?.story_items || [];
+
+  // Automatically select first channel on load or page switch
+  useEffect(() => {
+    if (channels.length > 0) {
+      if (!selectedChannelId || !channels.some((c) => c.id === selectedChannelId)) {
+        setSelectedChannelId(channels[0].id);
+      }
+    } else {
+      setSelectedChannelId(undefined);
+    }
+  }, [channels, selectedChannelId]);
+
   const createChannel = async (channel: Omit<Channel, 'id' | 'created_at'>) => {
     try {
       const newChannel = await storiesService.createStoryChannel(channel);
-      setChannels((prev) => [newChannel, ...prev]);
+      await fetchChannelsAndItems();
       return newChannel;
     } catch (err: any) {
       alert('Falha ao criar canal: ' + err.message);
@@ -46,7 +72,7 @@ export function useStories() {
   const updateChannel = async (id: string, updates: Partial<Omit<Channel, 'id' | 'created_at'>>) => {
     try {
       const updated = await storiesService.updateStoryChannel(id, updates);
-      setChannels((prev) => prev.map((c) => (c.id === id ? updated : c)));
+      await fetchChannelsAndItems();
       return updated;
     } catch (err: any) {
       alert('Falha ao atualizar canal: ' + err.message);
@@ -58,12 +84,10 @@ export function useStories() {
     if (!confirm('Deseja realmente excluir este canal? Todos os stories vinculados serão deletados.')) return;
     try {
       await storiesService.deleteStoryChannel(id);
-      setChannels((prev) => prev.filter((c) => c.id !== id));
       if (selectedChannelId === id) {
         setSelectedChannelId(undefined);
-      } else {
-        setItems((prev) => prev.filter((item) => item.channel_id !== id));
       }
+      await fetchChannelsAndItems();
     } catch (err: any) {
       alert('Falha ao deletar canal: ' + err.message);
     }
@@ -72,9 +96,7 @@ export function useStories() {
   const createItem = async (item: Omit<StoryItem, 'id' | 'created_at'>) => {
     try {
       const newItem = await storiesService.createStoryItem(item);
-      // reload items to make sure relation names are loaded
-      const itemsData = await storiesService.getStoryItems(selectedChannelId);
-      setItems(itemsData);
+      await fetchChannelsAndItems();
       return newItem;
     } catch (err: any) {
       alert('Falha ao criar story: ' + err.message);
@@ -85,7 +107,7 @@ export function useStories() {
   const updateItemStatus = async (id: string, status: StoryItem['status']) => {
     try {
       await storiesService.updateStoryItem(id, { status });
-      setItems((prev) => prev.map((item) => (item.id === id ? { ...item, status } : item)));
+      await fetchChannelsAndItems();
     } catch (err: any) {
       alert('Falha ao atualizar status do story: ' + err.message);
     }
@@ -95,7 +117,7 @@ export function useStories() {
     if (!confirm('Deseja realmente excluir este story?')) return;
     try {
       await storiesService.deleteStoryItem(id);
-      setItems((prev) => prev.filter((item) => item.id !== id));
+      await fetchChannelsAndItems();
     } catch (err: any) {
       alert('Falha ao deletar story: ' + err.message);
     }
@@ -106,6 +128,18 @@ export function useStories() {
     items,
     selectedChannelId,
     setSelectedChannelId,
+    page,
+    setPage,
+    pageSize,
+    totalCount,
+    filter,
+    setFilter,
+    sort,
+    setSort,
+    stateFilter,
+    setStateFilter,
+    cityFilter,
+    setCityFilter,
     loading,
     error,
     createChannel,
