@@ -8,6 +8,7 @@ import { useBanners } from '../hooks/useBanners';
 import { uploadToR2 } from '../services/storageService';
 import { supabase } from '../lib/supabase';
 import { storiesService } from '../services/storiesService';
+import logoImg from '../assets/logo.png';
 import {
   LayoutDashboard,
   Users,
@@ -806,7 +807,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <AlertTriangle color="var(--primary)" size={28} />
+          <img src={logoImg.src} alt="Logo Siga" style={{ height: '56px', objectFit: 'contain' }} />
           <h2>Painel Siga</h2>
         </div>
 
@@ -1267,8 +1268,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   ) : (
                     <div style={{ display: 'flex', overflowX: 'hidden', flexDirection: 'column', gap: '12px', flex: 1 }}>
                       {storyHook.channels.map((ch) => {
-                        const activeCount = (ch.story_items || []).filter((item: any) => 
-                          item.status === 'active' && 
+                        const activeCount = (ch.story_items || []).filter((item: any) =>
+                          item.status === 'active' &&
                           item.data_expiracao >= new Date().toISOString().split('T')[0]
                         ).length;
                         const isSelected = ch.id === storyHook.selectedChannelId;
@@ -1308,12 +1309,12 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                 <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
                                   <span style={{ fontWeight: 600, fontSize: '14px', color: isSelected ? 'var(--primary)' : 'inherit' }}>{ch.name}</span>
                                   {ch.state ? (
-                                    <span 
-                                      style={{ 
-                                        fontSize: '9px', 
-                                        padding: '2px 6px', 
+                                    <span
+                                      style={{
+                                        fontSize: '9px',
+                                        padding: '2px 6px',
                                         borderRadius: '4px',
-                                        backgroundColor: 'rgba(239, 68, 68, 0.1)', 
+                                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
                                         color: 'var(--primary)',
                                         fontWeight: 600
                                       }}
@@ -1321,12 +1322,12 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                       {ch.city ? `${ch.city}/${ch.state}` : ch.state}
                                     </span>
                                   ) : (
-                                    <span 
-                                      style={{ 
-                                        fontSize: '9px', 
-                                        padding: '2px 6px', 
+                                    <span
+                                      style={{
+                                        fontSize: '9px',
+                                        padding: '2px 6px',
                                         borderRadius: '4px',
-                                        backgroundColor: 'var(--bg-app)', 
+                                        backgroundColor: 'var(--bg-app)',
                                         color: 'var(--text-muted)',
                                         border: '1px solid var(--border-light)',
                                         fontWeight: 600
@@ -1350,8 +1351,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} onClick={(e) => e.stopPropagation()}>
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                                 <span style={{ fontSize: '9px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Destaque</span>
-                                <div 
-                                  className="switch-container" 
+                                <div
+                                  className="switch-container"
                                   onClick={() => storyHook.updateChannel(ch.id, { is_destaque: !ch.is_destaque })}
                                 >
                                   <div className={`switch-track ${ch.is_destaque ? 'active' : ''}`}>
@@ -1454,11 +1455,11 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                               )}
                               <span
                                 className={`badge ${isExpired ? 'badge-danger' : 'badge-success'}`}
-                                style={{ 
-                                  position: 'absolute', 
-                                  top: '8px', 
-                                  right: '8px', 
-                                  backgroundColor: isExpired ? '#6b7280' : undefined 
+                                style={{
+                                  position: 'absolute',
+                                  top: '8px',
+                                  right: '8px',
+                                  backgroundColor: isExpired ? '#6b7280' : undefined
                                 }}
                               >
                                 {isExpired ? 'Expirado' : 'Ativo'}
@@ -2002,12 +2003,12 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   folder="avatars"
                 />
               </div>
-              
+
               <div className="form-group">
                 <label>Abrangência do Canal</label>
-                <select 
-                  className="select-field" 
-                  value={newChannelScope} 
+                <select
+                  className="select-field"
+                  value={newChannelScope}
                   onChange={(e) => {
                     const val = e.target.value as any;
                     setNewChannelScope(val);
@@ -2028,9 +2029,9 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               {newChannelScope !== 'national' && (
                 <div className="form-group">
                   <label>Estado (UF)</label>
-                  <select 
-                    className="select-field" 
-                    value={newChannelState} 
+                  <select
+                    className="select-field"
+                    value={newChannelState}
                     onChange={(e) => setNewChannelState(e.target.value)}
                     required
                   >
@@ -2045,13 +2046,13 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               {newChannelScope === 'city' && (
                 <div className="form-group">
                   <label>Nome da Cidade</label>
-                  <input 
-                    type="text" 
-                    className="input-field" 
-                    value={newChannelCity} 
-                    onChange={(e) => setNewChannelCity(e.target.value)} 
-                    placeholder="Ex: São Paulo" 
-                    required 
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={newChannelCity}
+                    onChange={(e) => setNewChannelCity(e.target.value)}
+                    placeholder="Ex: São Paulo"
+                    required
                   />
                 </div>
               )}

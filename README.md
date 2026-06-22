@@ -1,6 +1,6 @@
 # Siga - Painel Administrativo Web
 
-Este é o Painel Administrativo Web para a plataforma **Siga**, desenvolvido em **React**, **TypeScript**, **Vite** e estilizado com um Design System premium glassmórfico. Ele fornece recursos de controle de moderação de denúncias, gerenciamento de usuários e publicação de stories integrados diretamente ao banco de dados do **Supabase**.
+Este é o Painel Administrativo Web para a plataforma **Siga**, desenvolvido em **React**, **TypeScript**, **Next** e estilizado com um Design System premium glassmórfico. Ele fornece recursos de controle de moderação de denúncias, gerenciamento de usuários e publicação de stories integrados diretamente ao banco de dados do **Supabase**.
 
 ---
 

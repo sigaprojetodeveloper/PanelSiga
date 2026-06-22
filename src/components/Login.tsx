@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { ShieldAlert, Key, User, Eye, EyeOff } from 'lucide-react';
+import logoImg from '../assets/logo.png';
 
 interface LoginProps {
   onLoginSuccess: (username: string) => void;
@@ -56,7 +57,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     <div className="login-container">
       <div className="login-card">
         <div className="login-logo">
-          <ShieldAlert size={36} color="var(--primary)" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logoImg.src} alt="Logo Siga" style={{ height: '56px', objectFit: 'contain' }} />
           <h1>Painel Siga</h1>
         </div>
 
