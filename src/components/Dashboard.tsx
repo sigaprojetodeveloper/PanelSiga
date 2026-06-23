@@ -1,3 +1,4 @@
+/* eslint-disable complexity */
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -9,6 +10,7 @@ import { uploadToR2 } from '../services/storageService';
 import { supabase } from '../lib/supabase';
 import { storiesService } from '../services/storiesService';
 import logoImg from '../assets/logo.png';
+import ImageCropperModal from './ImageCropperModal';
 import {
   LayoutDashboard,
   Users,
@@ -124,6 +126,8 @@ interface FileUploadZoneProps {
   setAspectRatioWarning?: (warn: boolean) => void;
   allowedTypes: string[];
   folder: string;
+  forceCrop?: boolean;
+  aspectRatio?: '9:16' | '1:1' | '16:9';
 }
 
 function FileUploadZone({
@@ -133,10 +137,13 @@ function FileUploadZone({
   setMediaType,
   setAspectRatioWarning,
   allowedTypes,
-  folder
+  folder,
+  forceCrop,
+  aspectRatio
 }: FileUploadZoneProps) {
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [cropFile, setCropFile] = useState<File | null>(null);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -145,6 +152,21 @@ function FileUploadZone({
       setDragActive(true);
     } else if (e.type === "dragleave") {
       setDragActive(false);
+    }
+  };
+
+  const uploadProcessedFile = async (fileToUpload: File) => {
+    setUploading(true);
+    try {
+      const filename = `${Date.now()}-${fileToUpload.name.replace(/\s+/g, '_')}`;
+      const contentType = fileToUpload.type;
+      const res = await uploadToR2(fileToUpload, filename, contentType, folder);
+      setMediaUrl(res.publicUrl);
+    } catch (err: any) {
+      console.error(err);
+      alert('Falha ao enviar arquivo: ' + err.message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -160,7 +182,7 @@ function FileUploadZone({
       if (setMediaType) setMediaType('image');
     }
 
-    if (setAspectRatioWarning && selectedFile.type.startsWith('image/')) {
+    if (!forceCrop && setAspectRatioWarning && selectedFile.type.startsWith('image/')) {
       const img = new Image();
       img.onload = () => {
         const aspect = img.width / img.height;
@@ -175,17 +197,10 @@ function FileUploadZone({
       setAspectRatioWarning(false);
     }
 
-    setUploading(true);
-    try {
-      const filename = `${Date.now()}-${selectedFile.name.replace(/\s+/g, '_')}`;
-      const contentType = selectedFile.type;
-      const res = await uploadToR2(selectedFile, filename, contentType, folder);
-      setMediaUrl(res.publicUrl);
-    } catch (err: any) {
-      console.error(err);
-      alert('Falha ao enviar arquivo: ' + err.message);
-    } finally {
-      setUploading(false);
+    if (forceCrop && selectedFile.type.startsWith('image/')) {
+      setCropFile(selectedFile);
+    } else {
+      await uploadProcessedFile(selectedFile);
     }
   };
 
@@ -271,6 +286,18 @@ function FileUploadZone({
             Aceitos: {allowedTypes.map(t => t.split('/')[1].toUpperCase()).join(', ')}
           </p>
         </div>
+      )}
+
+      {cropFile && (
+        <ImageCropperModal
+          file={cropFile}
+          aspectRatio={aspectRatio}
+          onCrop={async (cropped) => {
+            setCropFile(null);
+            await uploadProcessedFile(cropped);
+          }}
+          onClose={() => setCropFile(null)}
+        />
       )}
     </div>
   );
@@ -364,6 +391,129 @@ function HistoricalBannerCard({
         >
           <Trash2 size={14} />
         </button>
+      </div>
+    </div>
+  );
+}
+
+interface ChannelRowProps {
+  ch: any;
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+  onToggleDestaque: (id: string, current: boolean) => void;
+  onToggleActive: (id: string, current: boolean) => void;
+  onDelete: (id: string) => void;
+}
+
+function ChannelRow({
+  ch,
+  isSelected,
+  onSelect,
+  onToggleDestaque,
+  onToggleActive,
+  onDelete
+}: ChannelRowProps) {
+  const activeCount = (ch.story_items || []).filter((item: any) =>
+    item.status === 'active' &&
+    item.data_expiracao >= new Date().toISOString().split('T')[0]
+  ).length;
+
+  return (
+    <div
+      onClick={() => onSelect(ch.id)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '12px',
+        backgroundColor: isSelected ? 'rgba(239, 68, 68, 0.08)' : 'var(--bg-app)',
+        borderLeft: isSelected ? '4px solid var(--primary)' : '4px solid transparent',
+        borderRadius: 'var(--radius-sm)',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        border: isSelected ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid transparent'
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {ch.avatar_url ? (
+          <img src={ch.avatar_url} alt={ch.name} style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
+        ) : (
+          <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 600 }}>
+            {ch.name[0]}
+          </div>
+        )}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+            <span style={{ fontWeight: 600, fontSize: '14px', color: isSelected ? 'var(--primary)' : 'inherit' }}>{ch.name}</span>
+            {ch.state ? (
+              <span
+                style={{
+                  fontSize: '9px',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  color: 'var(--primary)',
+                  fontWeight: 600
+                }}
+              >
+                {ch.city ? `${ch.city}/${ch.state}` : ch.state}
+              </span>
+            ) : (
+              <span
+                style={{
+                  fontSize: '9px',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  backgroundColor: 'var(--bg-app)',
+                  color: 'var(--text-muted)',
+                  border: '1px solid var(--border-light)',
+                  fontWeight: 600
+                }}
+              >
+                Nacional
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+            Ativos: <strong style={{ color: activeCount > 0 ? 'var(--success)' : 'inherit' }}>{activeCount}</strong>
+            {ch.is_active ? (
+              <span className="badge badge-success" style={{ fontSize: '8px', padding: '1px 4px', marginLeft: '6px' }}>Ativo</span>
+            ) : (
+              <span className="badge badge-secondary" style={{ fontSize: '8px', padding: '1px 4px', marginLeft: '6px', backgroundColor: '#6b7280', color: 'white' }}>Inativo</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+          <span style={{ fontSize: '9px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Destaque</span>
+          <div
+            className="switch-container"
+            onClick={() => onToggleDestaque(ch.id, ch.is_destaque)}
+          >
+            <div className={`switch-track ${ch.is_destaque ? 'active' : ''}`}>
+              <div className="switch-thumb" />
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            style={{ padding: '4px 8px' }}
+            onClick={() => onToggleActive(ch.id, ch.is_active)}
+          >
+            {ch.is_active ? 'Desativar' : 'Ativar'}
+          </button>
+          <button
+            className="btn btn-danger btn-sm"
+            style={{ padding: '4px 8px', color: 'var(--danger)', background: 'transparent' }}
+            onClick={() => onDelete(ch.id)}
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1267,120 +1417,23 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     <p style={{ color: 'var(--text-muted)' }}>Nenhum canal criado.</p>
                   ) : (
                     <div style={{ display: 'flex', overflowX: 'hidden', flexDirection: 'column', gap: '12px', flex: 1 }}>
-                      {storyHook.channels.map((ch) => {
-                        const activeCount = (ch.story_items || []).filter((item: any) =>
-                          item.status === 'active' &&
-                          item.data_expiracao >= new Date().toISOString().split('T')[0]
-                        ).length;
-                        const isSelected = ch.id === storyHook.selectedChannelId;
-
-                        return (
-                          <div
-                            key={ch.id}
-                            onClick={() => {
-                              if (storyHook.selectedChannelId === ch.id) {
-                                storyHook.setSelectedChannelId(undefined);
-                              } else {
-                                storyHook.setSelectedChannelId(ch.id);
-                              }
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '12px',
-                              backgroundColor: isSelected ? 'rgba(239, 68, 68, 0.08)' : 'var(--bg-app)',
-                              borderLeft: isSelected ? '4px solid var(--primary)' : '4px solid transparent',
-                              borderRadius: 'var(--radius-sm)',
-                              cursor: 'pointer',
-                              transition: 'all 0.2s ease',
-                              border: isSelected ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid transparent'
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              {ch.avatar_url ? (
-                                <img src={ch.avatar_url} alt={ch.name} style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
-                              ) : (
-                                <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 600 }}>
-                                  {ch.name[0]}
-                                </div>
-                              )}
-                              <div>
-                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                                  <span style={{ fontWeight: 600, fontSize: '14px', color: isSelected ? 'var(--primary)' : 'inherit' }}>{ch.name}</span>
-                                  {ch.state ? (
-                                    <span
-                                      style={{
-                                        fontSize: '9px',
-                                        padding: '2px 6px',
-                                        borderRadius: '4px',
-                                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                                        color: 'var(--primary)',
-                                        fontWeight: 600
-                                      }}
-                                    >
-                                      {ch.city ? `${ch.city}/${ch.state}` : ch.state}
-                                    </span>
-                                  ) : (
-                                    <span
-                                      style={{
-                                        fontSize: '9px',
-                                        padding: '2px 6px',
-                                        borderRadius: '4px',
-                                        backgroundColor: 'var(--bg-app)',
-                                        color: 'var(--text-muted)',
-                                        border: '1px solid var(--border-light)',
-                                        fontWeight: 600
-                                      }}
-                                    >
-                                      Nacional
-                                    </span>
-                                  )}
-                                </div>
-                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                                  Ativos: <strong style={{ color: activeCount > 0 ? 'var(--success)' : 'inherit' }}>{activeCount}</strong>
-                                  {ch.is_active ? (
-                                    <span className="badge badge-success" style={{ fontSize: '8px', padding: '1px 4px', marginLeft: '6px' }}>Ativo</span>
-                                  ) : (
-                                    <span className="badge badge-secondary" style={{ fontSize: '8px', padding: '1px 4px', marginLeft: '6px', backgroundColor: '#6b7280', color: 'white' }}>Inativo</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} onClick={(e) => e.stopPropagation()}>
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                                <span style={{ fontSize: '9px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Destaque</span>
-                                <div
-                                  className="switch-container"
-                                  onClick={() => storyHook.updateChannel(ch.id, { is_destaque: !ch.is_destaque })}
-                                >
-                                  <div className={`switch-track ${ch.is_destaque ? 'active' : ''}`}>
-                                    <div className="switch-thumb" />
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div style={{ display: 'flex', gap: '4px' }}>
-                                <button
-                                  className="btn btn-secondary btn-sm"
-                                  style={{ padding: '4px 8px' }}
-                                  onClick={() => storyHook.updateChannel(ch.id, { is_active: !ch.is_active })}
-                                >
-                                  {ch.is_active ? 'Desativar' : 'Ativar'}
-                                </button>
-                                <button
-                                  className="btn btn-danger btn-sm"
-                                  style={{ padding: '4px 8px', color: 'var(--danger)', background: 'transparent' }}
-                                  onClick={() => storyHook.deleteChannel(ch.id)}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {storyHook.channels.map((ch) => (
+                        <ChannelRow
+                          key={ch.id}
+                          ch={ch}
+                          isSelected={ch.id === storyHook.selectedChannelId}
+                          onSelect={(id) => {
+                            if (storyHook.selectedChannelId === id) {
+                              storyHook.setSelectedChannelId(undefined);
+                            } else {
+                              storyHook.setSelectedChannelId(id);
+                            }
+                          }}
+                          onToggleDestaque={(id, current) => storyHook.updateChannel(id, { is_destaque: !current })}
+                          onToggleActive={(id, current) => storyHook.updateChannel(id, { is_active: !current })}
+                          onDelete={(id) => storyHook.deleteChannel(id)}
+                        />
+                      ))}
                     </div>
                   )}
 
@@ -1995,12 +2048,14 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 <input type="text" className="input-field" value={newChannelName} onChange={(e) => setNewChannelName(e.target.value)} placeholder="Ex: Siga Construtora" required />
               </div>
               <div className="form-group">
-                <label>Avatar do Canal (Apenas Imagem)</label>
+                <label>Avatar do Canal (Recortado na proporção 1:1)</label>
                 <FileUploadZone
                   mediaUrl={newChannelAvatar}
                   setMediaUrl={setNewChannelAvatar}
                   allowedTypes={['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']}
                   folder="avatars"
+                  forceCrop={true}
+                  aspectRatio="1:1"
                 />
               </div>
 
@@ -2105,7 +2160,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               </div>
 
               <div className="form-group">
-                <label>Mídia (Arraste imagem ou vídeo ou selecione o arquivo)</label>
+                <label>Mídia (Imagens serão recortadas na proporção 9:16)</label>
                 <FileUploadZone
                   mediaUrl={newStoryMediaUrl}
                   setMediaUrl={setNewStoryMediaUrl}
@@ -2116,6 +2171,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     'video/mp4', 'video/quicktime', 'video/webm', 'video/x-matroska', 'video/ogg'
                   ]}
                   folder="stories"
+                  forceCrop={true}
+                  aspectRatio="9:16"
                 />
               </div>
 
@@ -2264,21 +2321,16 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               </div>
 
               <div className="form-group">
-                <label>Imagem do Banner (Relação de Aspecto Recomendada: 16:9)</label>
+                <label>Imagem do Banner (Recortada na proporção 16:9)</label>
                 <FileUploadZone
                   mediaUrl={bannerImageUrl}
                   setMediaUrl={setBannerImageUrl}
                   mediaType="image"
-                  setAspectRatioWarning={setBannerAspectWarning}
                   allowedTypes={['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']}
                   folder="banners"
+                  forceCrop={true}
+                  aspectRatio="16:9"
                 />
-                {bannerAspectWarning && (
-                  <div className="banner-aspect-ratio-warning">
-                    <AlertTriangle size={16} />
-                    <span>A imagem enviada não possui a proporção ideal de 16:9. Ela pode ficar distorcida ou cortada no carrossel do aplicativo.</span>
-                  </div>
-                )}
               </div>
 
               {renderLinkConfigFields(
