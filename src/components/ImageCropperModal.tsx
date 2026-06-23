@@ -196,6 +196,16 @@ interface CropCoords {
   sourceHeight: number;
 }
 
+function limitCoord(val: number, maxVal: number): number {
+  if (!isFinite(val)) return 0;
+  return Math.max(0, Math.min(val, maxVal - 1));
+}
+
+function limitDim(val: number, maxVal: number, offset: number): number {
+  if (!isFinite(val) || val <= 0) return maxVal - offset;
+  return Math.min(val, maxVal - offset);
+}
+
 const getCropCoords = (
   naturalWidth: number,
   naturalHeight: number,
@@ -205,14 +215,23 @@ const getCropCoords = (
   viewportWidth: number,
   viewportHeight: number
 ): CropCoords => {
-  const smin = Math.max(viewportWidth / naturalWidth, viewportHeight / naturalHeight);
-  const scale = smin * zoom;
+  const safeWidth = naturalWidth || 1;
+  const safeHeight = naturalHeight || 1;
+  const safeZoom = zoom || 1;
+
+  const smin = Math.max(viewportWidth / safeWidth, viewportHeight / safeHeight);
+  const scale = (smin * safeZoom) || 1;
+
+  const sourceX = limitCoord(-positionX / scale, safeWidth);
+  const sourceY = limitCoord(-positionY / scale, safeHeight);
+  const sourceWidth = limitDim(viewportWidth / scale, safeWidth, sourceX);
+  const sourceHeight = limitDim(viewportHeight / scale, safeHeight, sourceY);
 
   return {
-    sourceX: -positionX / scale,
-    sourceY: -positionY / scale,
-    sourceWidth: viewportWidth / scale,
-    sourceHeight: viewportHeight / scale,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
   };
 };
 
@@ -254,7 +273,7 @@ const getCropCoords = (
       if (!blob) throw new Error('Failed to generate image blob');
 
       // Create new File object under 1MB
-      const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
+      const nameWithoutExt = file.name ? file.name.replace(/\.[^/.]+$/, '') : 'image';
       const croppedFile = new File([blob], `${nameWithoutExt}_cropped.jpg`, {
         type: 'image/jpeg',
       });
@@ -262,7 +281,7 @@ const getCropCoords = (
       onCrop(croppedFile);
     } catch (error) {
       console.error('Error cropping image:', error);
-      alert('Ocorreu um erro ao processar e cortar a imagem.');
+      alert(`Ocorreu um erro ao processar e cortar a imagem: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setProcessing(false);
     }
