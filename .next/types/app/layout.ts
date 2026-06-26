@@ -1,4 +1,4 @@
-// File: /home/gernano/workspace/antigravity/Projeto_Siga/SigaPanelAdmin/src/app/layout.tsx
+// File: /home/gernano/workspace/antigravity/Projeto_Siga/ProjetoGlobal/SigaPanelAdmin/src/app/layout.tsx
 import * as entry from '../../../src/app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
