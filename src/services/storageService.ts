@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 
-const STORAGE_ENV = process.env.NEXT_PUBLIC_STORAGE_ENV || 'develop';
+const STORAGE_ENV = process.env.SIGA_STORAGE_ENV || 'develop';
 
 export interface UploadResponse {
     publicUrl: string;
