@@ -1,5 +1,6 @@
 import '../index.css';
 import { Inter } from 'next/font/google';
+import { ToastProvider } from '../hooks/useToast';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -23,9 +24,11 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={inter.variable}>
       <body>
-        <div id="root">
-          {children}
-        </div>
+        <ToastProvider>
+          <div id="root">
+            {children}
+          </div>
+        </ToastProvider>
       </body>
     </html>
   );

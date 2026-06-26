@@ -1,22 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
 import { bannersService } from '../services/bannersService';
 import type { Database } from '../types/database.types';
+import { useToast } from './useToast';
 
 type Banner = Database['public']['Tables']['banners']['Row'];
 
 export function useBanners() {
+  const { success, error } = useToast();
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const [errorState, setErrorState] = useState<Error | null>(null);
 
   const fetchBanners = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setErrorState(null);
     try {
       const data = await bannersService.getBanners();
       setBanners(data);
     } catch (err: any) {
-      setError(err);
+      setErrorState(err);
     } finally {
       setLoading(false);
     }
@@ -32,7 +34,7 @@ export function useBanners() {
       setBanners((prev) => [newBanner, ...prev]);
       return newBanner;
     } catch (err: any) {
-      alert('Falha ao criar banner: ' + err.message);
+      error('Falha ao criar banner: ' + err.message);
       throw err;
     }
   };
@@ -43,7 +45,7 @@ export function useBanners() {
       setBanners((prev) => prev.map((b) => (b.id === id ? updated : b)));
       return updated;
     } catch (err: any) {
-      alert('Falha ao atualizar banner: ' + err.message);
+      error('Falha ao atualizar banner: ' + err.message);
       throw err;
     }
   };
@@ -53,15 +55,16 @@ export function useBanners() {
     try {
       await bannersService.deleteBanner(id);
       setBanners((prev) => prev.filter((b) => b.id !== id));
+      success('Banner excluído com sucesso!');
     } catch (err: any) {
-      alert('Falha ao deletar banner: ' + err.message);
+      error('Falha ao deletar banner: ' + err.message);
     }
   };
 
   return {
     banners,
     loading,
-    error,
+    error: errorState,
     createBanner,
     updateBanner,
     deleteBanner,

@@ -9,6 +9,8 @@ import { useBanners } from '../hooks/useBanners';
 import { uploadToR2 } from '../services/storageService';
 import { supabase } from '../lib/supabase';
 import { storiesService } from '../services/storiesService';
+import { useToast } from '../hooks/useToast';
+import { Country, State, City } from 'country-state-city';
 import logoImg from '../assets/logo.png';
 import ImageCropperModal from './ImageCropperModal';
 import {
@@ -32,6 +34,14 @@ import {
   Edit2,
   Link as LinkIcon
 } from 'lucide-react';
+
+const getTodayStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 const ESTADOS_BRASIL = [
   { value: 'AC', label: 'Acre' },
@@ -141,9 +151,11 @@ function FileUploadZone({
   forceCrop,
   aspectRatio
 }: FileUploadZoneProps) {
+  const { error } = useToast();
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [cropFile, setCropFile] = useState<File | null>(null);
+  const [uploadStatus, setUploadStatus] = useState('Enviando arquivo...');
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -155,16 +167,74 @@ function FileUploadZone({
     }
   };
 
+  const trimVideoTo15Seconds = (file: File): Promise<Blob | File> => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.src = URL.createObjectURL(file);
+      video.muted = true;
+      video.playsInline = true;
+
+      video.onloadedmetadata = () => {
+        if (video.duration <= 15.5) {
+          resolve(file);
+          return;
+        }
+
+        const stream = (video as any).captureStream ? (video as any).captureStream() : null;
+        if (!stream) {
+          resolve(file);
+          return;
+        }
+
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        const chunks: BlobPart[] = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            chunks.push(e.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          const trimmedBlob = new Blob(chunks, { type: 'video/webm' });
+          resolve(trimmedBlob);
+        };
+
+        video.play().then(() => {
+          mediaRecorder.start();
+          setTimeout(() => {
+            mediaRecorder.stop();
+            video.pause();
+            URL.revokeObjectURL(video.src);
+          }, 15000); // Para a gravação exatamente em 15 segundos
+        }).catch(() => {
+          resolve(file);
+        });
+      };
+
+      video.onerror = () => {
+        resolve(file);
+      };
+    });
+  };
+
   const uploadProcessedFile = async (fileToUpload: File) => {
     setUploading(true);
+    setUploadStatus('Preparando arquivo...');
     try {
+      let fileToSend: File | Blob = fileToUpload;
+      if (fileToUpload.type.startsWith('video/')) {
+        setUploadStatus('Cortando vídeo para 15 segundos (aguarde)...');
+        fileToSend = await trimVideoTo15Seconds(fileToUpload);
+      }
+      setUploadStatus('Enviando arquivo...');
       const filename = `${Date.now()}-${fileToUpload.name.replace(/\s+/g, '_')}`;
-      const contentType = fileToUpload.type;
-      const res = await uploadToR2(fileToUpload, filename, contentType, folder);
+      const contentType = fileToSend.type || fileToUpload.type;
+      const res = await uploadToR2(fileToSend, filename, contentType, folder);
       setMediaUrl(res.publicUrl);
     } catch (err: any) {
       console.error(err);
-      alert('Falha ao enviar arquivo: ' + err.message);
+      error('Falha ao enviar arquivo: ' + err.message);
     } finally {
       setUploading(false);
     }
@@ -172,7 +242,7 @@ function FileUploadZone({
 
   const processFile = async (selectedFile: File) => {
     if (!allowedTypes.includes(selectedFile.type)) {
-      alert(`Formato de arquivo inválido. Apenas os formatos ${allowedTypes.map(t => t.split('/')[1].toUpperCase()).join(', ')} são aceitos.`);
+      error(`Formato de arquivo inválido. Apenas os formatos ${allowedTypes.map(t => t.split('/')[1].toUpperCase()).join(', ')} são aceitos.`);
       return;
     }
 
@@ -247,7 +317,7 @@ function FileUploadZone({
             borderTopColor: 'var(--primary)',
             animation: 'spin 1s linear infinite',
           }} />
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Enviando arquivo...</p>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{uploadStatus}</p>
         </div>
       ) : mediaUrl ? (
         <div className="upload-preview-container" onClick={(e) => e.stopPropagation()}>
@@ -415,7 +485,7 @@ function ChannelRow({
 }: ChannelRowProps) {
   const activeCount = (ch.story_items || []).filter((item: any) =>
     item.status === 'active' &&
-    item.data_expiracao >= new Date().toISOString().split('T')[0]
+    item.data_expiracao >= getTodayStr()
   ).length;
 
   return (
@@ -525,6 +595,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
+  const { success, error, warning, info } = useToast();
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'stories' | 'reports' | 'settings' | 'banners'>('overview');
 
   // Custom Hooks
@@ -542,6 +613,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [addChannelModalOpen, setAddChannelModalOpen] = useState(false);
   const [addStoryModalOpen, setAddStoryModalOpen] = useState(false);
   const [addBannerModalOpen, setAddBannerModalOpen] = useState(false);
+  const [previewMedia, setPreviewMedia] = useState<{ url: string, type: 'image' | 'video' } | null>(null);
 
   // Edit user state
   const [editUserId, setEditUserId] = useState('');
@@ -554,7 +626,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelAvatar, setNewChannelAvatar] = useState('');
   const [newChannelDestaque, setNewChannelDestaque] = useState(false);
-  const [newChannelScope, setNewChannelScope] = useState<'national' | 'state' | 'city'>('national');
+  const [newChannelScope, setNewChannelScope] = useState<'global' | 'national' | 'state' | 'city'>('national');
+  const [newChannelCountry, setNewChannelCountry] = useState('Brazil');
   const [newChannelState, setNewChannelState] = useState('');
   const [newChannelCity, setNewChannelCity] = useState('');
 
@@ -568,6 +641,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [newStoryLinkCustomRoute, setNewStoryLinkCustomRoute] = useState('');
   const [newStoryLinkLabel, setNewStoryLinkLabel] = useState('');
   const [newStoryExpiration, setNewStoryExpiration] = useState('');
+  const [savingStory, setSavingStory] = useState(false);
 
   // Add/Edit banner state
   const [editBannerId, setEditBannerId] = useState('');
@@ -580,6 +654,10 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [bannerLinkLabel, setBannerLinkLabel] = useState('');
   const [bannerExpiration, setBannerExpiration] = useState('');
   const [bannerAspectWarning, setBannerAspectWarning] = useState(false);
+  const [bannerScope, setBannerScope] = useState<'global' | 'national' | 'state' | 'city'>('global');
+  const [bannerCountry, setBannerCountry] = useState('Brazil');
+  const [bannerState, setBannerState] = useState('');
+  const [bannerCity, setBannerCity] = useState('');
 
   // Users list for redirection
   const [linkUsersList, setLinkUsersList] = useState<{ id: string; name: string | null }[]>([]);
@@ -637,13 +715,16 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       avatar_url: newChannelAvatar || null,
       is_destaque: newChannelDestaque,
       is_active: true,
-      state: newChannelScope !== 'national' ? newChannelState || null : null,
+      scope: newChannelScope,
+      country: newChannelScope !== 'global' ? newChannelCountry || null : null,
+      state: (newChannelScope === 'state' || newChannelScope === 'city') ? newChannelState || null : null,
       city: newChannelScope === 'city' ? newChannelCity || null : null
     });
     setNewChannelName('');
     setNewChannelAvatar('');
     setNewChannelDestaque(false);
     setNewChannelScope('national');
+    setNewChannelCountry('Brazil');
     setNewChannelState('');
     setNewChannelCity('');
     setAddChannelModalOpen(false);
@@ -681,9 +762,17 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const handleSaveStoryItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newStoryChannelId || !newStoryMediaUrl || !newStoryExpiration) {
-      alert('Preencha os campos obrigatórios.');
+      warning('Preencha os campos obrigatórios.');
       return;
     }
+
+    const todayStr = getTodayStr();
+    if (newStoryExpiration < todayStr) {
+      warning('A data de expiração não pode ser anterior à data de hoje.');
+      return;
+    }
+
+    setSavingStory(true);
 
     const assembledLink = assembleLinkUrl(newStoryLinkType, newStoryLinkRawValue, newStoryLinkCustomRoute);
     let finalLabel = newStoryLinkLabel || null;
@@ -695,7 +784,6 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       }
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
     const itemData = {
       channel_id: newStoryChannelId,
       media_url: newStoryMediaUrl,
@@ -710,14 +798,17 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       if (editStoryId) {
         await storiesService.updateStoryItem(editStoryId, itemData);
         await storyHook.refetch();
-        alert('Story atualizado com sucesso!');
+        success('Story atualizado com sucesso!');
       } else {
         await storyHook.createItem(itemData);
-        alert('Story publicado com sucesso!');
+        success('Story publicado com sucesso!');
       }
       setAddStoryModalOpen(false);
     } catch (err: any) {
       console.error(err);
+      error('Ocorreu um erro ao salvar o story: ' + err.message);
+    } finally {
+      setSavingStory(false);
     }
   };
 
@@ -732,6 +823,10 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setBannerLinkLabel('');
     setBannerExpiration('');
     setBannerAspectWarning(false);
+    setBannerScope('global');
+    setBannerCountry('Brazil');
+    setBannerState('');
+    setBannerCity('');
     setAddBannerModalOpen(true);
   };
 
@@ -749,13 +844,17 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setBannerLinkLabel(banner.link_label || '');
     setBannerExpiration(banner.data_expiracao);
     setBannerAspectWarning(false);
+    setBannerScope(banner.scope || 'global');
+    setBannerCountry(banner.country || 'Brazil');
+    setBannerState(banner.state || '');
+    setBannerCity(banner.city || '');
     setAddBannerModalOpen(true);
   };
 
   const handleSaveBanner = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bannerImageUrl || !bannerExpiration) {
-      alert('Preencha os campos obrigatórios.');
+      warning('Preencha os campos obrigatórios.');
       return;
     }
 
@@ -769,35 +868,45 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       }
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayStr();
+    if (bannerExpiration < todayStr) {
+      warning('A data de expiração não pode ser anterior à data de hoje.');
+      return;
+    }
+
     const bannerData = {
       image_url: bannerImageUrl,
       title: bannerTitle || null,
       subtitle: bannerSubtitle || null,
       link_url: assembledLink,
       link_label: finalLabel,
-      status: (bannerExpiration < todayStr ? 'expired' : 'active') as 'active' | 'expired',
-      data_expiracao: bannerExpiration
+      status: 'active' as 'active' | 'expired',
+      data_expiracao: bannerExpiration,
+      scope: bannerScope,
+      country: bannerScope !== 'global' ? bannerCountry || null : null,
+      state: (bannerScope === 'state' || bannerScope === 'city') ? bannerState || null : null,
+      city: bannerScope === 'city' ? bannerCity || null : null
     };
 
     try {
       if (editBannerId) {
-        await bannersHook.updateBanner(editBannerId, bannerData);
-        alert('Banner atualizado com sucesso!');
+        await bannersHook.updateBanner(editBannerId, { ...bannerData, status: (bannerExpiration < todayStr ? 'expired' : 'active') });
+        success('Banner atualizado com sucesso!');
       } else {
-        await bannersHook.createBanner(bannerData);
-        alert('Banner criado com sucesso!');
+        await bannersHook.createBanner({ ...bannerData, status: (bannerExpiration < todayStr ? 'expired' : 'active') });
+        success('Banner criado com sucesso!');
       }
       setAddBannerModalOpen(false);
     } catch (err: any) {
       console.error(err);
+      error('Ocorreu um erro ao salvar o banner: ' + err.message);
     }
   };
 
   const handleToggleBannerStatus = async (banner: any) => {
     const newStatus = banner.status === 'active' ? 'expired' : 'active';
     const updates: any = { status: newStatus };
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayStr();
     if (newStatus === 'active' && banner.data_expiracao < todayStr) {
       const nextMonth = new Date();
       nextMonth.setDate(nextMonth.getDate() + 30);
@@ -857,6 +966,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               value={linkLabel}
               onChange={(e) => setLinkLabel(e.target.value)}
               placeholder="Ex: Saiba Mais, Falar Conosco"
+              maxLength={50}
             />
           </div>
         </div>
@@ -887,7 +997,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               required
               onBlur={() => {
                 if (rawValue && !rawValue.startsWith('http://') && !rawValue.startsWith('https://')) {
-                  alert('Atenção: Links externos devem começar com http:// ou https://');
+                  warning('Atenção: Links externos devem começar com http:// ou https://');
                 }
               }}
             />
@@ -1336,36 +1446,81 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     </select>
                   </div>
                   <div className="filter-control">
-                    <label>Filtrar por UF</label>
+                    <label>Abrangência</label>
                     <select
                       className="select-field"
-                      value={storyHook.stateFilter}
+                      value={storyHook.scopeFilter}
                       onChange={(e) => {
-                        storyHook.setStateFilter(e.target.value);
+                        storyHook.setScopeFilter(e.target.value);
                         storyHook.setPage(1);
                       }}
                     >
-                      <option value="all">Todos (Nacional/UF)</option>
-                      <option value="national">Apenas Nacional</option>
-                      {ESTADOS_BRASIL.map(uf => (
-                        <option key={uf.value} value={uf.value}>{uf.value} - {uf.label}</option>
-                      ))}
+                      <option value="all">Todas as abrangências</option>
+                      <option value="global">Global (Mundo)</option>
+                      <option value="national">Nacional</option>
+                      <option value="state">Estadual</option>
+                      <option value="city">Municipal</option>
                     </select>
                   </div>
-                  <div className="filter-control">
-                    <label>Buscar Cidade</label>
-                    <input
-                      type="text"
-                      className="input-field"
-                      placeholder="Ex: São Paulo"
-                      style={{ height: '36px', fontSize: '14px' }}
-                      value={storyHook.cityFilter}
-                      onChange={(e) => {
-                        storyHook.setCityFilter(e.target.value);
-                        storyHook.setPage(1);
-                      }}
-                    />
-                  </div>
+                  {storyHook.scopeFilter !== 'all' && storyHook.scopeFilter !== 'global' && (
+                    <div className="filter-control">
+                      <label>Filtrar por País</label>
+                      <select
+                        className="select-field"
+                        value={storyHook.countryFilter}
+                        onChange={(e) => {
+                          storyHook.setCountryFilter(e.target.value);
+                          storyHook.setStateFilter('all');
+                          storyHook.setCityFilter('');
+                          storyHook.setPage(1);
+                        }}
+                      >
+                        <option value="all">Todos os Países</option>
+                        {Country.getAllCountries().map((c) => (
+                          <option key={c.isoCode} value={c.name}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {storyHook.scopeFilter !== 'all' && (storyHook.scopeFilter === 'state' || storyHook.scopeFilter === 'city') && storyHook.countryFilter !== 'all' && (
+                    <div className="filter-control">
+                      <label>Filtrar por Estado</label>
+                      <select
+                        className="select-field"
+                        value={storyHook.stateFilter}
+                        onChange={(e) => {
+                          storyHook.setStateFilter(e.target.value);
+                          storyHook.setCityFilter('');
+                          storyHook.setPage(1);
+                        }}
+                      >
+                        <option value="all">Todos os Estados</option>
+                        {(() => {
+                          const selectedCountryObj = Country.getAllCountries().find(c => c.name === storyHook.countryFilter);
+                          const states = selectedCountryObj ? State.getStatesOfCountry(selectedCountryObj.isoCode) : [];
+                          return states.map((s) => (
+                            <option key={s.isoCode} value={s.isoCode}>{s.name} ({s.isoCode})</option>
+                          ));
+                        })()}
+                      </select>
+                    </div>
+                  )}
+                  {storyHook.scopeFilter === 'city' && (
+                    <div className="filter-control">
+                      <label>Buscar Cidade</label>
+                      <input
+                        type="text"
+                        className="input-field"
+                        placeholder="Ex: São Paulo"
+                        style={{ height: '36px', fontSize: '14px' }}
+                        value={storyHook.cityFilter}
+                        onChange={(e) => {
+                          storyHook.setCityFilter(e.target.value);
+                          storyHook.setPage(1);
+                        }}
+                      />
+                    </div>
+                  )}
                   <div className="filter-control">
                     <label>Ordenar Canais</label>
                     <select
@@ -1484,7 +1639,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '16px' }}>
                       {storyHook.items.map((item: any) => {
-                        const todayStr = new Date().toISOString().split('T')[0];
+                        const todayStr = getTodayStr();
                         const isExpired = item.data_expiracao < todayStr;
 
                         return (
@@ -1500,19 +1655,77 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                               flexDirection: 'column'
                             }}
                           >
-                            <div style={{ height: '180px', backgroundColor: 'black', position: 'relative' }}>
+                            <div 
+                              className="media-container"
+                              onClick={() => setPreviewMedia({ url: item.media_url, type: item.media_type })}
+                              style={{ 
+                                height: '180px', 
+                                backgroundColor: 'black', 
+                                position: 'relative',
+                                cursor: 'pointer'
+                              }}
+                            >
                               {item.media_type === 'image' ? (
-                                <img src={item.media_url} alt="Story" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                <img
+                                  src={item.media_url}
+                                  alt="Story"
+                                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                  onError={(e) => {
+                                    console.error("Erro ao carregar imagem do story:", item.media_url);
+                                    e.currentTarget.src = "https://images.unsplash.com/photo-1594322436404-5a0526db4d13?w=300&h=500&fit=crop";
+                                  }}
+                                />
                               ) : (
-                                <video src={item.media_url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} controls={false} />
+                                <video
+                                  src={item.media_url}
+                                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                  controls={false}
+                                  onError={(e) => {
+                                    console.error("Erro ao carregar vídeo do story:", item.media_url);
+                                  }}
+                                />
                               )}
+                              
+                              {/* Hover Overlay */}
+                              <div
+                                className="media-hover-overlay"
+                                style={{
+                                  position: 'absolute',
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  backgroundColor: 'rgba(0, 0, 0, 0.4)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  opacity: 0,
+                                  transition: 'opacity 0.2s ease',
+                                  zIndex: 5
+                                }}
+                              >
+                                <span style={{
+                                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                                  padding: '10px',
+                                  borderRadius: '50%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: '#fff',
+                                  backdropFilter: 'blur(4px)'
+                                }}>
+                                  <Eye size={20} />
+                                </span>
+                              </div>
+
                               <span
                                 className={`badge ${isExpired ? 'badge-danger' : 'badge-success'}`}
                                 style={{
                                   position: 'absolute',
                                   top: '8px',
                                   right: '8px',
-                                  backgroundColor: isExpired ? '#6b7280' : undefined
+                                  backgroundColor: isExpired ? '#6b7280' : undefined,
+                                  zIndex: 6
                                 }}
                               >
                                 {isExpired ? 'Expirado' : 'Ativo'}
@@ -1747,7 +1960,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     <option>Desativado</option>
                   </select>
                 </div>
-                <button className="btn btn-primary" style={{ width: 'fit-content' }} onClick={() => alert('Configurações salvas.')}>
+                <button className="btn btn-primary" style={{ width: 'fit-content' }} onClick={() => success('Configurações salvas.')}>
                   Salvar Alterações
                 </button>
               </div>
@@ -1766,135 +1979,157 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 </button>
               </div>
 
-              {/* Banners em Exibição (Máx 5) */}
-              <div style={{ marginBottom: '32px' }}>
-                <h3 style={{ fontSize: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--success)' }}></span>
-                  Banners em Exibição no App (Máx 5 ativos mais recentes)
-                </h3>
-                {(() => {
-                  const todayStr = new Date().toISOString().split('T')[0];
-                  const activeBanners = bannersHook.banners
-                    .filter(b => b.status === 'active' && b.data_expiracao >= todayStr)
-                    .slice(0, 5);
+              {bannersHook.error && (
+                <div style={{
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  color: 'var(--danger)',
+                  padding: '16px',
+                  borderRadius: 'var(--radius-md)',
+                  marginBottom: '24px',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  fontSize: '14px'
+                }}>
+                  <strong>Erro ao carregar banners:</strong> {bannersHook.error.message || 'Erro de conexão ou permissão com o banco de dados.'}
+                </div>
+              )}
 
-                  if (activeBanners.length === 0) {
-                    return (
-                      <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', textAlign: 'center' }}>
-                        Nenhum banner ativo em exibição no momento.
-                      </div>
-                    );
-                  }
+              {bannersHook.loading ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                  Carregando banners...
+                </div>
+              ) : (
+                <>
+                  {/* Banners em Exibição (Máx 5) */}
+                  <div style={{ marginBottom: '32px' }}>
+                    <h3 style={{ fontSize: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--success)' }}></span>
+                      Banners em Exibição no App (Máx 5 ativos mais recentes)
+                    </h3>
+                    {(() => {
+                      const todayStr = getTodayStr();
+                      const activeBanners = bannersHook.banners
+                        .filter(b => b.status === 'active' && b.data_expiracao >= todayStr)
+                        .slice(0, 5);
 
-                  return (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-                      {activeBanners.map((banner) => (
-                        <div
-                          key={banner.id}
-                          className="banner-active-card"
-                          style={{
-                            backgroundColor: 'var(--bg-card)',
-                            borderRadius: 'var(--radius-md)',
-                            border: '1px solid var(--border-light)',
-                            overflow: 'hidden',
-                            display: 'flex',
-                            flexDirection: 'column'
-                          }}
-                        >
-                          <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', backgroundColor: '#f0f0f0' }}>
-                            <img
-                              src={banner.image_url}
-                              alt={banner.title || 'Banner'}
-                              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                            <span className="badge badge-success" style={{ position: 'absolute', top: '10px', right: '10px' }}>
-                              Em Exibição
-                            </span>
+                      if (activeBanners.length === 0) {
+                        return (
+                          <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', textAlign: 'center' }}>
+                            Nenhum banner ativo em exibição no momento.
                           </div>
-                          <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <h4 style={{ fontSize: '15px', fontWeight: 600 }}>{banner.title || 'Sem título'}</h4>
-                            <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{banner.subtitle || 'Sem subtítulo'}</p>
-                            {banner.link_url && (
-                              <div style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)' }}>
-                                <LinkIcon size={12} />
-                                <a href={banner.link_url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>
-                                  {banner.link_label || 'Ver Mais'}
-                                </a>
+                        );
+                      }
+
+                      return (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+                          {activeBanners.map((banner) => (
+                            <div
+                              key={banner.id}
+                              className="banner-active-card"
+                              style={{
+                                backgroundColor: 'var(--bg-card)',
+                                borderRadius: 'var(--radius-md)',
+                                border: '1px solid var(--border-light)',
+                                overflow: 'hidden',
+                                display: 'flex',
+                                flexDirection: 'column'
+                              }}
+                            >
+                              <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', backgroundColor: '#f0f0f0' }}>
+                                <img
+                                  src={banner.image_url}
+                                  alt={banner.title || 'Banner'}
+                                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                                <span className="badge badge-success" style={{ position: 'absolute', top: '10px', right: '10px' }}>
+                                  Em Exibição
+                                </span>
                               </div>
-                            )}
-                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Calendar size={12} /> Expira em: {new Date(banner.data_expiracao).toLocaleDateString()}
+                              <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <h4 style={{ fontSize: '15px', fontWeight: 600 }}>{banner.title || 'Sem título'}</h4>
+                                <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{banner.subtitle || 'Sem subtítulo'}</p>
+                                {banner.link_url && (
+                                  <div style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)' }}>
+                                    <LinkIcon size={12} />
+                                    <a href={banner.link_url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>
+                                      {banner.link_label || 'Ver Mais'}
+                                    </a>
+                                  </div>
+                                )}
+                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <Calendar size={12} /> Expira em: {new Date(banner.data_expiracao).toLocaleDateString()}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', borderTop: '1px solid var(--border-light)' }}>
+                                <button
+                                  onClick={() => handleToggleBannerStatus(banner)}
+                                  style={{ flex: 1, padding: '10px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', fontSize: '12px', cursor: 'pointer', fontWeight: 600 }}
+                                >
+                                  Expirar
+                                </button>
+                                <button
+                                  onClick={() => handleOpenEditBanner(banner)}
+                                  style={{ padding: '10px 16px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', cursor: 'pointer', color: 'var(--text-muted)' }}
+                                  title="Editar"
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                                <button
+                                  onClick={() => bannersHook.deleteBanner(banner.id)}
+                                  style={{ padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}
+                                  title="Excluir"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                          <div style={{ display: 'flex', borderTop: '1px solid var(--border-light)' }}>
-                            <button
-                              onClick={() => handleToggleBannerStatus(banner)}
-                              style={{ flex: 1, padding: '10px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', fontSize: '12px', cursor: 'pointer', fontWeight: 600 }}
-                            >
-                              Expirar
-                            </button>
-                            <button
-                              onClick={() => handleOpenEditBanner(banner)}
-                              style={{ padding: '10px 16px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', cursor: 'pointer', color: 'var(--text-muted)' }}
-                              title="Editar"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                            <button
-                              onClick={() => bannersHook.deleteBanner(banner.id)}
-                              style={{ padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}
-                              title="Excluir"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
+                      );
+                    })()}
+                  </div>
 
-              {/* Histórico de Banners / Banners Expirados */}
-              <div>
-                <h3 style={{ fontSize: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--text-muted)' }}></span>
-                  Histórico de Banners / Não Exibidos (Expirados ou Inativos)
-                </h3>
-                {(() => {
-                  const todayStr = new Date().toISOString().split('T')[0];
-                  // Top 5 active banners IDs
-                  const activeBannersIds = bannersHook.banners
-                    .filter(b => b.status === 'active' && b.data_expiracao >= todayStr)
-                    .slice(0, 5)
-                    .map(b => b.id);
+                  {/* Histórico de Banners / Banners Expirados */}
+                  <div>
+                    <h3 style={{ fontSize: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--text-muted)' }}></span>
+                      Histórico de Banners / Não Exibidos (Expirados ou Inativos)
+                    </h3>
+                    {(() => {
+                      const todayStr = getTodayStr();
+                      // Top 5 active banners IDs
+                      const activeBannersIds = bannersHook.banners
+                        .filter(b => b.status === 'active' && b.data_expiracao >= todayStr)
+                        .slice(0, 5)
+                        .map(b => b.id);
 
-                  const historicalBanners = bannersHook.banners.filter(b => !activeBannersIds.includes(b.id));
+                      const historicalBanners = bannersHook.banners.filter(b => !activeBannersIds.includes(b.id));
 
-                  if (historicalBanners.length === 0) {
-                    return (
-                      <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', textAlign: 'center' }}>
-                        Nenhum banner no histórico.
-                      </div>
-                    );
-                  }
+                      if (historicalBanners.length === 0) {
+                        return (
+                          <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', textAlign: 'center' }}>
+                            Nenhum banner no histórico.
+                          </div>
+                        );
+                      }
 
-                  return (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-                      {historicalBanners.map((banner) => (
-                        <HistoricalBannerCard
-                          key={banner.id}
-                          banner={banner}
-                          todayStr={todayStr}
-                          onToggleStatus={handleToggleBannerStatus}
-                          onEdit={handleOpenEditBanner}
-                          onDelete={bannersHook.deleteBanner}
-                        />
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
+                      return (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+                          {historicalBanners.map((banner) => (
+                            <HistoricalBannerCard
+                              key={banner.id}
+                              banner={banner}
+                              todayStr={todayStr}
+                              onToggleStatus={handleToggleBannerStatus}
+                              onEdit={handleOpenEditBanner}
+                              onDelete={bannersHook.deleteBanner}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -2009,7 +2244,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
             <form onSubmit={handleSaveUserEdit}>
               <div className="form-group">
                 <label>Nome Completo</label>
-                <input type="text" className="input-field" value={editUserName} onChange={(e) => setEditUserName(e.target.value)} required />
+                <input type="text" className="input-field" value={editUserName} onChange={(e) => setEditUserName(e.target.value)} maxLength={50} required />
               </div>
               <div className="form-group">
                 <label>Email</label>
@@ -2021,7 +2256,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               </div>
               <div className="form-group">
                 <label>Apresentação / Bio</label>
-                <textarea className="textarea-field" style={{ minHeight: '80px', width: '100%' }} value={editUserBio} onChange={(e) => setEditUserBio(e.target.value)} />
+                <textarea className="textarea-field" style={{ minHeight: '80px', width: '100%' }} value={editUserBio} onChange={(e) => setEditUserBio(e.target.value)} maxLength={140} />
               </div>
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
@@ -2045,7 +2280,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
             <form onSubmit={handleCreateChannel}>
               <div className="form-group">
                 <label>Nome do Canal</label>
-                <input type="text" className="input-field" value={newChannelName} onChange={(e) => setNewChannelName(e.target.value)} placeholder="Ex: Siga Construtora" required />
+                <input type="text" className="input-field" value={newChannelName} onChange={(e) => setNewChannelName(e.target.value)} placeholder="Ex: Siga Construtora" maxLength={50} required />
               </div>
               <div className="form-group">
                 <label>Avatar do Canal (Recortado na proporção 1:1)</label>
@@ -2053,62 +2288,108 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   mediaUrl={newChannelAvatar}
                   setMediaUrl={setNewChannelAvatar}
                   allowedTypes={['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']}
-                  folder="avatars"
+                  folder="images/channels"
                   forceCrop={true}
                   aspectRatio="1:1"
                 />
               </div>
 
-              <div className="form-group">
-                <label>Abrangência do Canal</label>
-                <select
-                  className="select-field"
-                  value={newChannelScope}
-                  onChange={(e) => {
-                    const val = e.target.value as any;
-                    setNewChannelScope(val);
-                    if (val === 'national') {
-                      setNewChannelState('');
-                      setNewChannelCity('');
-                    } else if (val === 'state') {
-                      setNewChannelCity('');
-                    }
-                  }}
-                >
-                  <option value="national">Nacional</option>
-                  <option value="state">Estadual (Apenas um Estado)</option>
-                  <option value="city">Municipal (Uma Cidade Específica)</option>
-                </select>
-              </div>
-
-              {newChannelScope !== 'national' && (
+              <div className="grid-2">
                 <div className="form-group">
-                  <label>Estado (UF)</label>
+                  <label>Abrangência do Canal</label>
                   <select
                     className="select-field"
-                    value={newChannelState}
-                    onChange={(e) => setNewChannelState(e.target.value)}
-                    required
+                    value={newChannelScope}
+                    onChange={(e) => {
+                      const val = e.target.value as any;
+                      setNewChannelScope(val);
+                      if (val === 'global') {
+                        setNewChannelCountry('Brazil');
+                        setNewChannelState('');
+                        setNewChannelCity('');
+                      } else if (val === 'national') {
+                        setNewChannelState('');
+                        setNewChannelCity('');
+                      } else if (val === 'state') {
+                        setNewChannelCity('');
+                      }
+                    }}
                   >
-                    <option value="">Selecione o Estado</option>
-                    {ESTADOS_BRASIL.map(uf => (
-                      <option key={uf.value} value={uf.value}>{uf.value} - {uf.label}</option>
-                    ))}
+                    <option value="global">Global (Todo o Mundo)</option>
+                    <option value="national">Nacional</option>
+                    <option value="state">Estadual</option>
+                    <option value="city">Municipal</option>
                   </select>
                 </div>
-              )}
 
-              {newChannelScope === 'city' && (
-                <div className="form-group">
-                  <label>Nome da Cidade</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    value={newChannelCity}
-                    onChange={(e) => setNewChannelCity(e.target.value)}
-                    placeholder="Ex: São Paulo"
-                    required
-                  />
+                {newChannelScope !== 'global' && (
+                  <div className="form-group">
+                    <label>País</label>
+                    <select
+                      className="select-field"
+                      value={newChannelCountry}
+                      onChange={(e) => {
+                        setNewChannelCountry(e.target.value);
+                        setNewChannelState('');
+                        setNewChannelCity('');
+                      }}
+                      required
+                    >
+                      <option value="">Selecione o País</option>
+                      {Country.getAllCountries().map((c) => (
+                        <option key={c.isoCode} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {(newChannelScope === 'state' || newChannelScope === 'city') && (
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label>Estado</label>
+                    <select
+                      className="select-field"
+                      value={newChannelState}
+                      onChange={(e) => {
+                        setNewChannelState(e.target.value);
+                        setNewChannelCity('');
+                      }}
+                      required
+                    >
+                      <option value="">Selecione o Estado</option>
+                      {(() => {
+                        const selectedCountryObj = Country.getAllCountries().find(c => c.name === newChannelCountry);
+                        const states = selectedCountryObj ? State.getStatesOfCountry(selectedCountryObj.isoCode) : [];
+                        return states.map((s) => (
+                          <option key={s.isoCode} value={s.isoCode}>{s.name} ({s.isoCode})</option>
+                        ));
+                      })()}
+                    </select>
+                  </div>
+
+                  {newChannelScope === 'city' && (
+                    <div className="form-group">
+                      <label>Cidade</label>
+                      <select
+                        className="select-field"
+                        value={newChannelCity}
+                        onChange={(e) => setNewChannelCity(e.target.value)}
+                        required
+                      >
+                        <option value="">Selecione a Cidade</option>
+                        {(() => {
+                          const selectedCountryObj = Country.getAllCountries().find(c => c.name === newChannelCountry);
+                          const states = selectedCountryObj ? State.getStatesOfCountry(selectedCountryObj.isoCode) : [];
+                          const selectedStateObj = states.find(s => s.isoCode === newChannelState);
+                          const cities = (selectedCountryObj && selectedStateObj) ? City.getCitiesOfState(selectedCountryObj.isoCode, selectedStateObj.isoCode) : [];
+                          return cities.map((c) => (
+                            <option key={c.name} value={c.name}>{c.name}</option>
+                          ));
+                        })()}
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
@@ -2129,7 +2410,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       {addStoryModalOpen && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <button className="modal-close" onClick={() => setAddStoryModalOpen(false)}>
+            <button className="modal-close" onClick={() => setAddStoryModalOpen(false)} disabled={savingStory}>
               <X size={20} />
             </button>
             <h3 className="modal-title">{editStoryId ? 'Editar Story Item' : 'Publicar Novo Story'}</h3>
@@ -2155,7 +2436,14 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 </div>
                 <div className="form-group">
                   <label>Data de Expiração</label>
-                  <input type="date" className="input-field" value={newStoryExpiration} onChange={(e) => setNewStoryExpiration(e.target.value)} required />
+                  <input
+                    type="date"
+                    className="input-field"
+                    value={newStoryExpiration}
+                    onChange={(e) => setNewStoryExpiration(e.target.value)}
+                    min={getTodayStr()}
+                    required
+                  />
                 </div>
               </div>
 
@@ -2170,7 +2458,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     'image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif',
                     'video/mp4', 'video/quicktime', 'video/webm', 'video/x-matroska', 'video/ogg'
                   ]}
-                  folder="stories"
+                  folder="images/stories"
                   forceCrop={true}
                   aspectRatio="9:16"
                 />
@@ -2188,8 +2476,24 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               )}
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setAddStoryModalOpen(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">{editStoryId ? 'Salvar Alterações' : 'Publicar Story'}</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setAddStoryModalOpen(false)} disabled={savingStory}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={savingStory}>
+                  {savingStory ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{
+                        width: '14px',
+                        height: '14px',
+                        borderRadius: '50%',
+                        border: '2px solid var(--text-white)',
+                        borderTopColor: 'transparent',
+                        animation: 'spin 1s linear infinite'
+                      }} />
+                      {editStoryId ? 'Salvando...' : 'Publicando...'}
+                    </span>
+                  ) : (
+                    editStoryId ? 'Salvar Alterações' : 'Publicar Story'
+                  )}
+                </button>
               </div>
             </form>
           </div>
@@ -2295,6 +2599,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     value={bannerTitle}
                     onChange={(e) => setBannerTitle(e.target.value)}
                     placeholder="Ex: Oferta Especial de Junho"
+                    maxLength={50}
                   />
                 </div>
                 <div className="form-group">
@@ -2305,6 +2610,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     value={bannerSubtitle}
                     onChange={(e) => setBannerSubtitle(e.target.value)}
                     placeholder="Ex: Descontos de até 30% em serviços"
+                    maxLength={50}
                   />
                 </div>
               </div>
@@ -2316,9 +2622,109 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   className="input-field"
                   value={bannerExpiration}
                   onChange={(e) => setBannerExpiration(e.target.value)}
+                  min={getTodayStr()}
                   required
                 />
               </div>
+
+              <div className="grid-2">
+                <div className="form-group">
+                  <label>Abrangência do Banner</label>
+                  <select
+                    className="select-field"
+                    value={bannerScope}
+                    onChange={(e) => {
+                      const val = e.target.value as any;
+                      setBannerScope(val);
+                      if (val === 'global') {
+                        setBannerCountry('Brazil');
+                        setBannerState('');
+                        setBannerCity('');
+                      } else if (val === 'national') {
+                        setBannerState('');
+                        setBannerCity('');
+                      } else if (val === 'state') {
+                        setBannerCity('');
+                      }
+                    }}
+                  >
+                    <option value="global">Global (Todo o Mundo)</option>
+                    <option value="national">Nacional</option>
+                    <option value="state">Estadual</option>
+                    <option value="city">Municipal</option>
+                  </select>
+                </div>
+
+                {bannerScope !== 'global' && (
+                  <div className="form-group">
+                    <label>País</label>
+                    <select
+                      className="select-field"
+                      value={bannerCountry}
+                      onChange={(e) => {
+                        setBannerCountry(e.target.value);
+                        setBannerState('');
+                        setBannerCity('');
+                      }}
+                      required
+                    >
+                      <option value="">Selecione o País</option>
+                      {Country.getAllCountries().map((c) => (
+                        <option key={c.isoCode} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {(bannerScope === 'state' || bannerScope === 'city') && (
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label>Estado</label>
+                    <select
+                      className="select-field"
+                      value={bannerState}
+                      onChange={(e) => {
+                        setBannerState(e.target.value);
+                        setBannerCity('');
+                      }}
+                      required
+                    >
+                      <option value="">Selecione o Estado</option>
+                      {(() => {
+                        const selectedCountryObj = Country.getAllCountries().find(c => c.name === bannerCountry);
+                        const states = selectedCountryObj ? State.getStatesOfCountry(selectedCountryObj.isoCode) : [];
+                        return states.map((s) => (
+                          <option key={s.isoCode} value={s.isoCode}>{s.name} ({s.isoCode})</option>
+                        ));
+                      })()}
+                    </select>
+                  </div>
+
+                  {bannerScope === 'city' && (
+                    <div className="form-group">
+                      <label>Cidade</label>
+                      <select
+                        className="select-field"
+                        value={bannerCity}
+                        onChange={(e) => setBannerCity(e.target.value)}
+                        required
+                      >
+                        <option value="">Selecione a Cidade</option>
+                        {(() => {
+                          const selectedCountryObj = Country.getAllCountries().find(c => c.name === bannerCountry);
+                          const states = selectedCountryObj ? State.getStatesOfCountry(selectedCountryObj.isoCode) : [];
+                          const selectedStateObj = states.find(s => s.isoCode === bannerState);
+                          const cities = (selectedCountryObj && selectedStateObj) ? City.getCitiesOfState(selectedCountryObj.isoCode, selectedStateObj.isoCode) : [];
+                          return cities.map((c) => (
+                            <option key={c.name} value={c.name}>{c.name}</option>
+                          ));
+                        })()}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="form-group">
                 <label>Imagem do Banner (Recortada na proporção 16:9)</label>
@@ -2327,7 +2733,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   setMediaUrl={setBannerImageUrl}
                   mediaType="image"
                   allowedTypes={['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']}
-                  folder="banners"
+                  folder="images/banners"
                   forceCrop={true}
                   aspectRatio="16:9"
                 />
@@ -2353,6 +2759,93 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {previewMedia && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+          onClick={() => setPreviewMedia(null)}
+        >
+          <div
+            style={{
+              position: 'relative',
+              maxWidth: '90vw',
+              maxHeight: '85vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#000',
+              borderRadius: 'var(--radius-md)',
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setPreviewMedia(null)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'rgba(0, 0, 0, 0.6)',
+                border: 'none',
+                color: '#fff',
+                borderRadius: '50%',
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                zIndex: 10
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.9)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.6)'; }}
+            >
+              <X size={20} />
+            </button>
+
+            {previewMedia.type === 'image' ? (
+              <img
+                src={previewMedia.url}
+                alt="Visualização"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '85vh',
+                  objectFit: 'contain',
+                  display: 'block'
+                }}
+              />
+            ) : (
+              <video
+                src={previewMedia.url}
+                controls
+                autoPlay
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '85vh',
+                  objectFit: 'contain',
+                  display: 'block'
+                }}
+              />
+            )}
           </div>
         </div>
       )}

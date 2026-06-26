@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { reportsService } from '../services/reportsService';
 import type { Database } from '../types/database.types';
+import { useToast } from './useToast';
 
 type Report = Database['public']['Tables']['reports']['Row'];
 
 export function useReports(initialStatus?: Report['status'], initialTargetType?: Report['target_type']) {
+  const { success, error } = useToast();
   const [reports, setReports] = useState<Report[]>([]);
   const [statusFilter, setStatusFilter] = useState<Report['status'] | undefined>(initialStatus);
   const [targetTypeFilter, setTargetTypeFilter] = useState<Report['target_type'] | undefined>(initialTargetType);
@@ -12,11 +14,11 @@ export function useReports(initialStatus?: Report['status'], initialTargetType?:
   const [pageSize] = useState(20);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const [errorState, setErrorState] = useState<Error | null>(null);
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setErrorState(null);
     try {
       const { data, totalCount } = await reportsService.getReports({
         page,
@@ -27,7 +29,7 @@ export function useReports(initialStatus?: Report['status'], initialTargetType?:
       setReports(data || []);
       setTotalCount(totalCount);
     } catch (err: any) {
-      setError(err);
+      setErrorState(err);
     } finally {
       setLoading(false);
     }
@@ -43,8 +45,9 @@ export function useReports(initialStatus?: Report['status'], initialTargetType?:
       setReports((prev) =>
         prev.map((rep) => (rep.id === reportId ? { ...rep, status, notes: notes || rep.notes } : rep))
       );
+      success('Denúncia atualizada com sucesso!');
     } catch (err: any) {
-      alert('Falha ao atualizar denúncia: ' + err.message);
+      error('Falha ao atualizar denúncia: ' + err.message);
       throw err;
     }
   };
@@ -53,7 +56,7 @@ export function useReports(initialStatus?: Report['status'], initialTargetType?:
     reports,
     totalCount,
     loading,
-    error,
+    error: errorState,
     page,
     setPage,
     statusFilter,

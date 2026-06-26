@@ -4,11 +4,19 @@ import type { Database } from '../types/database.types';
 type Banner = Database['public']['Tables']['banners']['Row'];
 
 export const bannersService = {
-  async getBanners() {
-    const { data, error } = await supabase
+  async getBanners(params?: {
+    scope?: string;
+    country?: string;
+    state?: string;
+    city?: string;
+  }) {
+    let query = supabase
       .from('banners')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
+
+    query = applyBannerFilters(query, params);
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) throw error;
     return data || [];
@@ -44,3 +52,33 @@ export const bannersService = {
     if (error) throw error;
   }
 };
+
+function applyBannerFilters(
+  query: any,
+  params?: {
+    scope?: string;
+    country?: string;
+    state?: string;
+    city?: string;
+  }
+) {
+  if (!params) return query;
+
+  let q = query;
+  const { scope, country, state, city } = params;
+
+  if (scope && scope !== 'all') {
+    q = q.eq('scope', scope);
+  }
+  if (country && country !== 'all') {
+    q = q.eq('country', country);
+  }
+  if (state && state !== 'all') {
+    q = q.eq('state', state);
+  }
+  if (city) {
+    q = q.ilike('city', `%${city}%`);
+  }
+
+  return q;
+}

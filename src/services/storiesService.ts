@@ -4,10 +4,18 @@ import type { Database } from '../types/database.types';
 type Channel = Database['public']['Tables']['story_channels']['Row'];
 type StoryItem = Database['public']['Tables']['story_items']['Row'];
 
+const getTodayStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export const storiesService = {
   // === Sincronização de Canais ===
   async syncChannelStatus(channelId: string) {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayStr();
     
     const { data: activeStories, error: storiesError } = await supabase
       .from('story_items')
@@ -37,7 +45,7 @@ export const storiesService = {
   },
 
   async syncAllChannelsStatus() {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayStr();
     
     const { data: channels, error: channelsError } = await supabase
       .from('story_channels')
@@ -72,6 +80,8 @@ export const storiesService = {
     pageSize: number;
     filter: 'all' | 'active' | 'inactive';
     sort: 'newest' | 'oldest';
+    scope?: string;
+    country?: string;
     state?: string;
     city?: string;
   }) {
@@ -81,7 +91,7 @@ export const storiesService = {
       console.error('Error syncing channels status:', syncErr);
     }
 
-    const { page, pageSize, filter, sort, state, city } = params;
+    const { page, pageSize, filter, sort, scope, country, state, city } = params;
     const startRange = (page - 1) * pageSize;
     const endRange = startRange + pageSize - 1;
 
@@ -89,7 +99,7 @@ export const storiesService = {
       .from('story_channels')
       .select('*, story_items(*)', { count: 'exact' });
 
-    query = applyChannelFilters(query, filter, state, city);
+    query = applyChannelFilters(query, filter, scope, country, state, city);
     query = applyChannelSorting(query, sort);
 
     // Order story_items inside the relation query
@@ -203,7 +213,7 @@ export const storiesService = {
   }
 };
 
-function applyChannelFilters(query: any, filter: string, state?: string, city?: string) {
+function applyChannelFilters(query: any, filter: string, scope?: string, country?: string, state?: string, city?: string) {
   let q = query;
   if (filter === 'active') {
     q = q.eq('is_active', true);
@@ -211,12 +221,15 @@ function applyChannelFilters(query: any, filter: string, state?: string, city?: 
     q = q.eq('is_active', false);
   }
 
-  if (state === 'national') {
-    q = q.is('state', null);
-  } else if (state && state !== 'all') {
+  if (scope && scope !== 'all') {
+    q = q.eq('scope', scope);
+  }
+  if (country && country !== 'all') {
+    q = q.eq('country', country);
+  }
+  if (state && state !== 'all') {
     q = q.eq('state', state);
   }
-
   if (city) {
     q = q.ilike('city', `%${city}%`);
   }

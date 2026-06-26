@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { storiesService } from '../services/storiesService';
 import type { Database } from '../types/database.types';
+import { useToast } from './useToast';
 
 type Channel = Database['public']['Tables']['story_channels']['Row'];
 type StoryItem = Database['public']['Tables']['story_items']['Row'];
 
 export function useStories() {
+  const { success, error } = useToast();
   const [channels, setChannels] = useState<any[]>([]);
   const [selectedChannelId, setSelectedChannelId] = useState<string | undefined>(undefined);
   const [page, setPage] = useState(1);
@@ -13,31 +15,35 @@ export function useStories() {
   const [totalCount, setTotalCount] = useState(0);
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [sort, setSort] = useState<'newest' | 'oldest'>('newest');
+  const [scopeFilter, setScopeFilter] = useState<string>('all');
+  const [countryFilter, setCountryFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [cityFilter, setCityFilter] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const [errorState, setErrorState] = useState<Error | null>(null);
 
   const fetchChannelsAndItems = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setErrorState(null);
     try {
       const { data, totalCount: count } = await storiesService.getStoryChannels({
         page,
         pageSize,
         filter,
         sort,
+        scope: scopeFilter,
+        country: countryFilter,
         state: stateFilter,
         city: cityFilter,
       });
       setChannels(data);
       setTotalCount(count);
     } catch (err: any) {
-      setError(err);
+      setErrorState(err);
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, filter, sort, stateFilter, cityFilter]);
+  }, [page, pageSize, filter, sort, scopeFilter, countryFilter, stateFilter, cityFilter]);
 
   useEffect(() => {
     fetchChannelsAndItems();
@@ -60,7 +66,7 @@ export function useStories() {
       await fetchChannelsAndItems();
       return newChannel;
     } catch (err: any) {
-      alert('Falha ao criar canal: ' + err.message);
+      error('Falha ao criar canal: ' + err.message);
       throw err;
     }
   };
@@ -71,7 +77,7 @@ export function useStories() {
       await fetchChannelsAndItems();
       return updated;
     } catch (err: any) {
-      alert('Falha ao atualizar canal: ' + err.message);
+      error('Falha ao atualizar canal: ' + err.message);
       throw err;
     }
   };
@@ -84,8 +90,9 @@ export function useStories() {
         setSelectedChannelId(undefined);
       }
       await fetchChannelsAndItems();
+      success('Canal deletado com sucesso!');
     } catch (err: any) {
-      alert('Falha ao deletar canal: ' + err.message);
+      error('Falha ao deletar canal: ' + err.message);
     }
   };
 
@@ -95,7 +102,7 @@ export function useStories() {
       await fetchChannelsAndItems();
       return newItem;
     } catch (err: any) {
-      alert('Falha ao criar story: ' + err.message);
+      error('Falha ao criar story: ' + err.message);
       throw err;
     }
   };
@@ -104,8 +111,9 @@ export function useStories() {
     try {
       await storiesService.updateStoryItem(id, { status });
       await fetchChannelsAndItems();
+      success('Status do story atualizado com sucesso!');
     } catch (err: any) {
-      alert('Falha ao atualizar status do story: ' + err.message);
+      error('Falha ao atualizar status do story: ' + err.message);
     }
   };
 
@@ -114,8 +122,9 @@ export function useStories() {
     try {
       await storiesService.deleteStoryItem(id);
       await fetchChannelsAndItems();
+      success('Story excluído com sucesso!');
     } catch (err: any) {
-      alert('Falha ao deletar story: ' + err.message);
+      error('Falha ao deletar story: ' + err.message);
     }
   };
 
@@ -132,6 +141,10 @@ export function useStories() {
     setFilter,
     sort,
     setSort,
+    scopeFilter,
+    setScopeFilter,
+    countryFilter,
+    setCountryFilter,
     stateFilter,
     setStateFilter,
     cityFilter,

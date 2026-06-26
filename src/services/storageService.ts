@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 
-const STORAGE_ENV = process.env.NEXT_PUBLIC_STORAGE_ENV || process.env.VITE_STORAGE_ENV || 'develop';
+const STORAGE_ENV = process.env.NEXT_PUBLIC_STORAGE_ENV || 'develop';
 
 export interface UploadResponse {
     publicUrl: string;
@@ -17,6 +17,12 @@ export async function uploadToR2(
     folder?: string
 ): Promise<UploadResponse> {
     try {
+        // Validação de tamanho máximo de arquivo (50MB) no frontend
+        const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+            throw new Error('O arquivo excede o limite máximo permitido de 50MB.');
+        }
+
         // 1. Solicita a URL pré-assinada de upload à Edge Function 'r2-storage' do Supabase
         let signedUrlData;
         try {

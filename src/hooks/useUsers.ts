@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { usersService } from '../services/usersService';
 import type { Database } from '../types/database.types';
+import { useToast } from './useToast';
 
 type User = Database['public']['Tables']['users']['Row'];
 
 export function useUsers() {
+  const { success, error } = useToast();
   const [users, setUsers] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<User['status'] | undefined>(undefined);
@@ -13,7 +15,7 @@ export function useUsers() {
   const [pageSize] = useState(20);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const [errorState, setErrorState] = useState<Error | null>(null);
 
   // Detail view state
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
@@ -21,7 +23,7 @@ export function useUsers() {
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setErrorState(null);
     try {
       const { data, totalCount } = await usersService.getUsers({
         page,
@@ -33,7 +35,7 @@ export function useUsers() {
       setUsers(data || []);
       setTotalCount(totalCount);
     } catch (err: any) {
-      setError(err);
+      setErrorState(err);
     } finally {
       setLoading(false);
     }
@@ -50,7 +52,7 @@ export function useUsers() {
       setSelectedUser(details);
       return details;
     } catch (err: any) {
-      alert('Falha ao carregar detalhes: ' + err.message);
+      error('Falha ao carregar detalhes: ' + err.message);
     } finally {
       setDetailsLoading(false);
     }
@@ -67,8 +69,9 @@ export function useUsers() {
       if (selectedUser && selectedUser.id === userId) {
         setSelectedUser((prev: any) => prev ? { ...prev, status } : null);
       }
+      success('Status do usuário atualizado!');
     } catch (err: any) {
-      alert('Falha ao atualizar status do usuário: ' + err.message);
+      error('Falha ao atualizar status do usuário: ' + err.message);
     }
   };
 
@@ -79,8 +82,9 @@ export function useUsers() {
       if (selectedUser && selectedUser.id === userId) {
         loadUserDetails(userId);
       }
+      success('Perfil atualizado com sucesso!');
     } catch (err: any) {
-      alert('Falha ao atualizar perfil: ' + err.message);
+      error('Falha ao atualizar perfil: ' + err.message);
     }
   };
 
@@ -88,7 +92,7 @@ export function useUsers() {
     users,
     totalCount,
     loading,
-    error,
+    error: errorState,
     page,
     setPage,
     search,

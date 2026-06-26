@@ -63,6 +63,8 @@ export interface Database {
           avatar_url: string | null;
           is_destaque: boolean;
           is_active: boolean;
+          scope: 'global' | 'national' | 'state' | 'city';
+          country: string | null;
           state: string | null;
           city: string | null;
           created_at: string;
@@ -163,6 +165,10 @@ export interface Database {
           link_label: string | null;
           status: 'active' | 'expired';
           data_expiracao: string;
+          scope: 'global' | 'national' | 'state' | 'city';
+          country: string | null;
+          state: string | null;
+          city: string | null;
           created_at: string;
         };
         Insert: Omit<Database['public']['Tables']['banners']['Row'], 'id' | 'created_at'>;

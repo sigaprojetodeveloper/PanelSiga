@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, ZoomIn, ZoomOut, Check } from 'lucide-react';
+import { useToast } from '../hooks/useToast';
 
 interface ImageCropperModalProps {
   file: File;
@@ -9,6 +10,7 @@ interface ImageCropperModalProps {
 }
 
 export default function ImageCropperModal({ file, aspectRatio = '9:16', onCrop, onClose }: ImageCropperModalProps) {
+  const { error: toastError } = useToast();
   const [imageSrc, setImageSrc] = useState<string>('');
   const [baseSize, setBaseSize] = useState({ width: 0, height: 0 });
   const [zoom, setZoom] = useState(1);
@@ -140,11 +142,16 @@ const reduceQuality = async (
   let blob: Blob | null = null;
   const getBlob = (q: number): Promise<Blob | null> => {
     return new Promise((resolve) => {
-      canvas.toBlob((b) => resolve(b), 'image/jpeg', q);
+      canvas.toBlob((b) => resolve(b), 'image/webp', q);
     });
   };
 
   blob = await getBlob(quality);
+  // Se já for menor que 1MB, não reduz qualidade
+  if (blob && blob.size <= targetSize) {
+    return blob;
+  }
+
   while (blob && blob.size > targetSize && quality > 0.3) {
     quality -= 0.1;
     blob = await getBlob(quality);
@@ -157,7 +164,7 @@ const scaleResolution = async (
   targetSize: number
 ): Promise<Blob | null> => {
   let blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.6);
+    canvas.toBlob((b) => resolve(b), 'image/webp', 0.8);
   });
   if (!blob || blob.size <= targetSize) return blob;
 
@@ -170,7 +177,7 @@ const scaleResolution = async (
     if (tempCtx) {
       tempCtx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height);
       blob = await new Promise<Blob | null>((resolve) => {
-        tempCanvas.toBlob((b) => resolve(b), 'image/jpeg', 0.6);
+        tempCanvas.toBlob((b) => resolve(b), 'image/webp', 0.8);
       });
     }
     scaleDown -= 0.1;
@@ -274,14 +281,14 @@ const getCropCoords = (
 
       // Create new File object under 1MB
       const nameWithoutExt = file.name ? file.name.replace(/\.[^/.]+$/, '') : 'image';
-      const croppedFile = new File([blob], `${nameWithoutExt}_cropped.jpg`, {
-        type: 'image/jpeg',
+      const croppedFile = new File([blob], `${nameWithoutExt}_cropped.webp`, {
+        type: 'image/webp',
       });
 
       onCrop(croppedFile);
     } catch (error) {
       console.error('Error cropping image:', error);
-      alert(`Ocorreu um erro ao processar e cortar a imagem: ${error instanceof Error ? error.message : String(error)}`);
+      toastError(`Ocorreu um erro ao processar e cortar a imagem: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setProcessing(false);
     }
