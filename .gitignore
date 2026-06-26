@@ -16,6 +16,9 @@ dist-ssr
 .env*
 !.env.example
 
+# Next.js build and cache
+.next/
+out/
 
 # Editor directories and files
 .vscode/*
