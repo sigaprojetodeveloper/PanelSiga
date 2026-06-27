@@ -1970,10 +1970,87 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           {/* ================= TAB: BANNERS ================= */}
           {activeTab === 'banners' && (
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
+              <div style={{ marginBottom: '16px' }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '16px' }}>
                   Gerencie os banners do carrossel principal do aplicativo móvel. O app exibe no máximo os 5 banners ativos mais recentes.
                 </p>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+                <div className="filters-group" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
+                  <div className="filter-control">
+                    <label>Abrangência</label>
+                    <select
+                      className="select-field"
+                      value={bannersHook.scopeFilter}
+                      onChange={(e) => {
+                        bannersHook.setScopeFilter(e.target.value);
+                      }}
+                    >
+                      <option value="all">Todas as abrangências</option>
+                      <option value="global">Global (Mundo)</option>
+                      <option value="national">Nacional</option>
+                      <option value="state">Estadual</option>
+                      <option value="city">Municipal</option>
+                    </select>
+                  </div>
+                  {bannersHook.scopeFilter !== 'all' && bannersHook.scopeFilter !== 'global' && (
+                    <div className="filter-control">
+                      <label>Filtrar por País</label>
+                      <select
+                        className="select-field"
+                        value={bannersHook.countryFilter}
+                        onChange={(e) => {
+                          bannersHook.setCountryFilter(e.target.value);
+                          bannersHook.setStateFilter('all');
+                          bannersHook.setCityFilter('');
+                        }}
+                      >
+                        <option value="all">Todos os Países</option>
+                        {Country.getAllCountries().map((c) => (
+                          <option key={c.isoCode} value={c.name}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {bannersHook.scopeFilter !== 'all' && (bannersHook.scopeFilter === 'state' || bannersHook.scopeFilter === 'city') && bannersHook.countryFilter !== 'all' && (
+                    <div className="filter-control">
+                      <label>Filtrar por Estado</label>
+                      <select
+                        className="select-field"
+                        value={bannersHook.stateFilter}
+                        onChange={(e) => {
+                          bannersHook.setStateFilter(e.target.value);
+                          bannersHook.setCityFilter('');
+                        }}
+                      >
+                        <option value="all">Todos os Estados</option>
+                        {(() => {
+                          const selectedCountryObj = Country.getAllCountries().find(c => c.name === bannersHook.countryFilter);
+                          const states = selectedCountryObj ? State.getStatesOfCountry(selectedCountryObj.isoCode) : [];
+                          return states.map((s) => (
+                            <option key={s.isoCode} value={s.isoCode}>{s.name} ({s.isoCode})</option>
+                          ));
+                        })()}
+                      </select>
+                    </div>
+                  )}
+                  {bannersHook.scopeFilter === 'city' && (
+                    <div className="filter-control">
+                      <label>Buscar Cidade</label>
+                      <input
+                        type="text"
+                        className="input-field"
+                        placeholder="Ex: São Paulo"
+                        style={{ height: '36px', fontSize: '14px' }}
+                        value={bannersHook.cityFilter}
+                        onChange={(e) => {
+                          bannersHook.setCityFilter(e.target.value);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
                 <button className="btn btn-primary" onClick={handleOpenAddBanner}>
                   <Plus size={16} /> Novo Banner
                 </button>

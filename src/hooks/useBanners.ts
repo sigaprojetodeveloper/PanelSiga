@@ -11,18 +11,28 @@ export function useBanners() {
   const [loading, setLoading] = useState(false);
   const [errorState, setErrorState] = useState<Error | null>(null);
 
+  const [scopeFilter, setScopeFilter] = useState<string>('all');
+  const [countryFilter, setCountryFilter] = useState<string>('all');
+  const [stateFilter, setStateFilter] = useState<string>('all');
+  const [cityFilter, setCityFilter] = useState<string>('');
+
   const fetchBanners = useCallback(async () => {
     setLoading(true);
     setErrorState(null);
     try {
-      const data = await bannersService.getBanners();
+      const data = await bannersService.getBanners({
+        scope: scopeFilter,
+        country: countryFilter,
+        state: stateFilter,
+        city: cityFilter,
+      });
       setBanners(data);
     } catch (err: any) {
       setErrorState(err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scopeFilter, countryFilter, stateFilter, cityFilter]);
 
   useEffect(() => {
     fetchBanners();
@@ -65,6 +75,14 @@ export function useBanners() {
     banners,
     loading,
     error: errorState,
+    scopeFilter,
+    setScopeFilter,
+    countryFilter,
+    setCountryFilter,
+    stateFilter,
+    setStateFilter,
+    cityFilter,
+    setCityFilter,
     createBanner,
     updateBanner,
     deleteBanner,

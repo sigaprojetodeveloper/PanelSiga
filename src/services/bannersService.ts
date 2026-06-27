@@ -69,15 +69,29 @@ function applyBannerFilters(
 
   if (scope && scope !== 'all') {
     q = q.eq('scope', scope);
-  }
-  if (country && country !== 'all') {
-    q = q.eq('country', country);
-  }
-  if (state && state !== 'all') {
-    q = q.eq('state', state);
-  }
-  if (city) {
-    q = q.ilike('city', `%${city}%`);
+    
+    if (scope === 'national') {
+      if (country && country !== 'all') {
+        q = q.eq('country', country);
+      }
+    } else if (scope === 'state') {
+      if (country && country !== 'all') {
+        q = q.eq('country', country);
+      }
+      if (state && state !== 'all') {
+        q = q.eq('state', state);
+      }
+    } else if (scope === 'city') {
+      if (country && country !== 'all') {
+        q = q.eq('country', country);
+      }
+      if (state && state !== 'all') {
+        q = q.eq('state', state);
+      }
+      if (city) {
+        q = q.ilike('city', `%${city}%`);
+      }
+    }
   }
 
   return q;
