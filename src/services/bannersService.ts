@@ -53,37 +53,52 @@ export const bannersService = {
   }
 };
 
-function applyBannerFilters(
-  query: any,
-  params?: {
-    scope?: string;
-    country?: string;
-    state?: string;
-    city?: string;
-  }
-) {
-  if (!params) return query;
+interface FilterParams {
+  scope?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+}
 
-  let q = query;
+function shouldApplyFilter(value?: string): boolean {
+  return !!value && value !== 'all';
+}
+
+function applyCountryFilter(query: any, scope: string, country?: string) {
+  const isCountryScope = ['national', 'state', 'city'].includes(scope);
+  if (isCountryScope && shouldApplyFilter(country)) {
+    return query.eq('country', country);
+  }
+  return query;
+}
+
+function applyStateFilter(query: any, scope: string, state?: string) {
+  const isStateScope = ['state', 'city'].includes(scope);
+  if (isStateScope && shouldApplyFilter(state)) {
+    return query.eq('state', state);
+  }
+  return query;
+}
+
+function applyCityFilter(query: any, scope: string, city?: string) {
+  const isCityScope = scope === 'city';
+  if (isCityScope && city) {
+    return query.ilike('city', `%${city}%`);
+  }
+  return query;
+}
+
+function applyBannerFilters(query: any, params?: FilterParams) {
+  if (!params || !params.scope || params.scope === 'all') {
+    return query;
+  }
+
   const { scope, country, state, city } = params;
+  let q = query.eq('scope', scope);
 
-  if (scope && scope !== 'all') {
-    q = q.eq('scope', scope);
-
-    const hasCountry = ['national', 'state', 'city'].includes(scope);
-    const hasState = ['state', 'city'].includes(scope);
-    const hasCity = scope === 'city';
-
-    if (hasCountry && country && country !== 'all') {
-      q = q.eq('country', country);
-    }
-    if (hasState && state && state !== 'all') {
-      q = q.eq('state', state);
-    }
-    if (hasCity && city) {
-      q = q.ilike('city', `%${city}%`);
-    }
-  }
+  q = applyCountryFilter(q, scope, country);
+  q = applyStateFilter(q, scope, state);
+  q = applyCityFilter(q, scope, city);
 
   return q;
 }
