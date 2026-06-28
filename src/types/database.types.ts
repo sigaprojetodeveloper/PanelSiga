@@ -163,7 +163,8 @@ export interface Database {
           subtitle: string | null;
           link_url: string | null;
           link_label: string | null;
-          status: 'active' | 'expired';
+          status: 'Agendado' | 'Ativo' | 'Expirado' | 'Desativado';
+          data_inicializacao: string;
           data_expiracao: string;
           scope: 'global' | 'national' | 'state' | 'city';
           country: string | null;

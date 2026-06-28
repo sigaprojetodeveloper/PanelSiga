@@ -388,19 +388,27 @@ function HistoricalBannerCard({
   onEdit,
   onDelete
 }: HistoricalBannerCardProps) {
-  const isExpired = banner.status === 'expired' || banner.data_expiracao < todayStr;
   const title = banner.title || 'Sem título';
   const subtitle = banner.subtitle || 'Sem subtítulo';
   const linkLabel = banner.link_label || 'Ver Mais';
-  const toggleText = banner.status === 'active' ? 'Desativar' : 'Reativar';
+  const toggleText = (banner.status === 'Ativo' || banner.status === 'Agendado') ? 'Desativar' : 'Reativar';
 
   let badgeClass = 'badge-warning';
   let badgeBg: string | undefined = undefined;
-  let badgeText = 'Inativo (Fora do Top 5)';
-  if (isExpired) {
+  let badgeText = 'Ativo (Fora do Top 5)';
+
+  if (banner.status === 'Agendado') {
+    badgeClass = 'badge-info';
+    badgeBg = '#3b82f6';
+    badgeText = 'Agendado';
+  } else if (banner.status === 'Expirado') {
     badgeClass = 'badge-danger';
     badgeBg = '#6b7280';
     badgeText = 'Expirado';
+  } else if (banner.status === 'Desativado') {
+    badgeClass = 'badge-danger';
+    badgeBg = '#ef4444';
+    badgeText = 'Desativado';
   }
 
   return (
@@ -436,8 +444,13 @@ function HistoricalBannerCard({
             </a>
           </div>
         )}
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <Calendar size={12} /> Expira em: {new Date(banner.data_expiracao).toLocaleDateString()}
+        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Calendar size={10} /> Início: {new Date(banner.data_inicializacao).toLocaleDateString()}
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Calendar size={10} /> Expira em: {new Date(banner.data_expiracao).toLocaleDateString()}
+          </span>
         </div>
       </div>
       <div style={{ display: 'flex', borderTop: '1px solid var(--border-light)' }}>
@@ -652,6 +665,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [bannerLinkRawValue, setBannerLinkRawValue] = useState('');
   const [bannerLinkCustomRoute, setBannerLinkCustomRoute] = useState('');
   const [bannerLinkLabel, setBannerLinkLabel] = useState('');
+  const [bannerInitialization, setBannerInitialization] = useState('');
   const [bannerExpiration, setBannerExpiration] = useState('');
   const [bannerAspectWarning, setBannerAspectWarning] = useState(false);
   const [bannerScope, setBannerScope] = useState<'global' | 'national' | 'state' | 'city'>('global');
@@ -661,6 +675,18 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
   // Users list for redirection
   const [linkUsersList, setLinkUsersList] = useState<{ id: string; name: string | null }[]>([]);
+
+  // State for paginating scheduled banners
+  const [scheduledLimit, setScheduledLimit] = useState(5);
+
+  useEffect(() => {
+    setScheduledLimit(5);
+  }, [
+    bannersHook.scopeFilter,
+    bannersHook.countryFilter,
+    bannersHook.stateFilter,
+    bannersHook.cityFilter
+  ]);
 
   useEffect(() => {
     async function loadLinkUsers() {
@@ -821,6 +847,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setBannerLinkRawValue('');
     setBannerLinkCustomRoute('');
     setBannerLinkLabel('');
+    setBannerInitialization(getTodayStr());
     setBannerExpiration('');
     setBannerAspectWarning(false);
     setBannerScope('global');
@@ -842,6 +869,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setBannerLinkCustomRoute(parsed.customRoute);
 
     setBannerLinkLabel(banner.link_label || '');
+    setBannerInitialization(banner.data_inicializacao || getTodayStr());
     setBannerExpiration(banner.data_expiracao);
     setBannerAspectWarning(false);
     setBannerScope(banner.scope || 'global');
@@ -851,10 +879,114 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setAddBannerModalOpen(true);
   };
 
+  const getNextDay = (dateStr: string): string => {
+    const date = new Date(dateStr + 'T12:00:00');
+    date.setDate(date.getDate() + 1);
+    return date.toISOString().split('T')[0];
+  };
+
+  const formatToDDMMYYYY = (dateStr: string): string => {
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  };
+
+  const checkBannerAvailability = async (
+    targetBanner: {
+      id?: string;
+      scope: string;
+      country: string | null;
+      state: string | null;
+      city: string | null;
+      data_inicializacao: string;
+    }
+  ): Promise<{ allowed: boolean; message?: string }> => {
+    const dateToCheck = targetBanner.data_inicializacao;
+
+    const { data: activeBanners, error: queryError } = await supabase
+      .from('banners')
+      .select('*')
+      .in('status', ['Ativo', 'Agendado'])
+      .lte('data_inicializacao', dateToCheck)
+      .gte('data_expiracao', dateToCheck);
+
+    if (queryError) {
+      throw new Error('Falha ao validar disponibilidade: ' + queryError.message);
+    }
+
+    const otherBanners = (activeBanners as any[] || []).filter((b: any) => b.id !== targetBanner.id);
+
+    const isAncestor = (
+      b1: { scope: string; country?: string | null; state?: string | null; city?: string | null },
+      b2: { scope: string; country?: string | null; state?: string | null; city?: string | null }
+    ) => {
+      if (b1.scope === 'global') return true;
+      if (b2.scope === 'global') return b1.scope === 'global';
+
+      if (b1.scope === 'national') {
+        return b1.country?.toLowerCase() === b2.country?.toLowerCase();
+      }
+      if (b1.scope === 'state') {
+        return b1.country?.toLowerCase() === b2.country?.toLowerCase() &&
+          b1.state?.toLowerCase() === b2.state?.toLowerCase();
+      }
+      if (b1.scope === 'city') {
+        return b1.country?.toLowerCase() === b2.country?.toLowerCase() &&
+          b1.state?.toLowerCase() === b2.state?.toLowerCase() &&
+          b1.city?.toLowerCase() === b2.city?.toLowerCase();
+      }
+      return false;
+    };
+
+    const isOverlapping = (b1: any, b2: any) => isAncestor(b1, b2) || isAncestor(b2, b1);
+
+    const overlapping = otherBanners.filter(b => isOverlapping(b, targetBanner));
+    const candidates = [...overlapping, targetBanner];
+
+    let maxCount = 0;
+    let blockedNode: any = null;
+    let ancestorsOfBlockedNode: any[] = [];
+
+    for (const candidate of candidates) {
+      const ancestors = candidates.filter(c => isAncestor(c, candidate));
+      if (ancestors.length > maxCount) {
+        maxCount = ancestors.length;
+        if (maxCount > 5) {
+          blockedNode = candidate;
+          ancestorsOfBlockedNode = ancestors.filter(c => c.id !== targetBanner.id);
+        }
+      }
+    }
+
+    if (maxCount > 5) {
+      let minExpDate = '';
+      for (const b of ancestorsOfBlockedNode) {
+        if (!minExpDate || b.data_expiracao < minExpDate) {
+          minExpDate = b.data_expiracao;
+        }
+      }
+
+      const nextDay = getNextDay(minExpDate);
+      const formattedNextDay = formatToDDMMYYYY(nextDay);
+
+      return {
+        allowed: false,
+        message: `Já existem 5 banners ativos para esta abrangência na data selecionada. A primeira data disponível para publicação é ${formattedNextDay}.`
+      };
+    }
+
+    return { allowed: true };
+  };
+
   const handleSaveBanner = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bannerImageUrl || !bannerExpiration) {
+    if (!bannerImageUrl || !bannerInitialization || !bannerExpiration) {
       warning('Preencha os campos obrigatórios.');
+      return;
+    }
+
+    if (bannerExpiration < bannerInitialization) {
+      warning('A data de expiração não pode ser anterior à data de inicialização.');
       return;
     }
 
@@ -868,32 +1000,52 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       }
     }
 
-    const todayStr = getTodayStr();
-    if (bannerExpiration < todayStr) {
-      warning('A data de expiração não pode ser anterior à data de hoje.');
-      return;
-    }
-
-    const bannerData = {
-      image_url: bannerImageUrl,
-      title: bannerTitle || null,
-      subtitle: bannerSubtitle || null,
-      link_url: assembledLink,
-      link_label: finalLabel,
-      status: 'active' as 'active' | 'expired',
-      data_expiracao: bannerExpiration,
+    const targetBanner = {
+      id: editBannerId || undefined,
       scope: bannerScope,
       country: bannerScope !== 'global' ? bannerCountry || null : null,
       state: (bannerScope === 'state' || bannerScope === 'city') ? bannerState || null : null,
-      city: bannerScope === 'city' ? bannerCity || null : null
+      city: bannerScope === 'city' ? bannerCity || null : null,
+      data_inicializacao: bannerInitialization,
     };
 
     try {
+      const availability = await checkBannerAvailability(targetBanner);
+      if (!availability.allowed) {
+        warning(availability.message || 'O limite de banners ativos foi ultrapassado.');
+        return;
+      }
+
+      const todayStr = getTodayStr();
+      let finalStatus: 'Agendado' | 'Ativo' | 'Expirado' | 'Desativado' = 'Ativo';
+      if (bannerInitialization > todayStr) {
+        finalStatus = 'Agendado';
+      } else if (bannerExpiration < todayStr) {
+        finalStatus = 'Expirado';
+      } else {
+        finalStatus = 'Ativo';
+      }
+
+      const bannerData = {
+        image_url: bannerImageUrl,
+        title: bannerTitle || null,
+        subtitle: bannerSubtitle || null,
+        link_url: assembledLink,
+        link_label: finalLabel,
+        status: finalStatus,
+        data_inicializacao: bannerInitialization,
+        data_expiracao: bannerExpiration,
+        scope: bannerScope,
+        country: targetBanner.country,
+        state: targetBanner.state,
+        city: targetBanner.city
+      };
+
       if (editBannerId) {
-        await bannersHook.updateBanner(editBannerId, { ...bannerData, status: (bannerExpiration < todayStr ? 'expired' : 'active') });
+        await bannersHook.updateBanner(editBannerId, bannerData);
         success('Banner atualizado com sucesso!');
       } else {
-        await bannersHook.createBanner({ ...bannerData, status: (bannerExpiration < todayStr ? 'expired' : 'active') });
+        await bannersHook.createBanner(bannerData);
         success('Banner criado com sucesso!');
       }
       setAddBannerModalOpen(false);
@@ -904,15 +1056,63 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   };
 
   const handleToggleBannerStatus = async (banner: any) => {
-    const newStatus = banner.status === 'active' ? 'expired' : 'active';
-    const updates: any = { status: newStatus };
     const todayStr = getTodayStr();
-    if (newStatus === 'active' && banner.data_expiracao < todayStr) {
+
+    if (banner.status === 'Ativo' || banner.status === 'Agendado') {
+      try {
+        await bannersHook.updateBanner(banner.id, { status: 'Desativado' });
+        success('Banner desativado com sucesso!');
+      } catch (err: any) {
+        console.error(err);
+        error('Falha ao desativar banner: ' + err.message);
+      }
+      return;
+    }
+
+    let targetExpDate = banner.data_expiracao;
+    if (targetExpDate < todayStr) {
       const nextMonth = new Date();
       nextMonth.setDate(nextMonth.getDate() + 30);
-      updates.data_expiracao = nextMonth.toISOString().split('T')[0];
+      targetExpDate = nextMonth.toISOString().split('T')[0];
     }
-    await bannersHook.updateBanner(banner.id, updates);
+
+    const targetInitDate = banner.data_inicializacao > todayStr ? banner.data_inicializacao : todayStr;
+
+    const targetBanner = {
+      id: banner.id,
+      scope: banner.scope,
+      country: banner.country,
+      state: banner.state,
+      city: banner.city,
+      data_inicializacao: targetInitDate
+    };
+
+    try {
+      const availability = await checkBannerAvailability(targetBanner);
+      if (!availability.allowed) {
+        warning(availability.message || 'Não há vaga disponível para reativar o banner.');
+        return;
+      }
+
+      let finalStatus: 'Agendado' | 'Ativo' | 'Expirado' | 'Desativado' = 'Ativo';
+      if (targetInitDate > todayStr) {
+        finalStatus = 'Agendado';
+      } else if (targetExpDate < todayStr) {
+        finalStatus = 'Expirado';
+      } else {
+        finalStatus = 'Ativo';
+      }
+
+      await bannersHook.updateBanner(banner.id, {
+        status: finalStatus,
+        data_inicializacao: targetInitDate,
+        data_expiracao: targetExpDate
+      });
+      success('Banner reativado com sucesso!');
+    } catch (err: any) {
+      console.error(err);
+      error('Falha ao reativar banner: ' + err.message);
+    }
   };
 
   const handleOpenReportDetails = (report: any) => {
@@ -1655,12 +1855,12 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                               flexDirection: 'column'
                             }}
                           >
-                            <div 
+                            <div
                               className="media-container"
                               onClick={() => setPreviewMedia({ url: item.media_url, type: item.media_type })}
-                              style={{ 
-                                height: '180px', 
-                                backgroundColor: 'black', 
+                              style={{
+                                height: '180px',
+                                backgroundColor: 'black',
                                 position: 'relative',
                                 cursor: 'pointer'
                               }}
@@ -1685,7 +1885,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                   }}
                                 />
                               )}
-                              
+
                               {/* Hover Overlay */}
                               <div
                                 className="media-hover-overlay"
@@ -2083,9 +2283,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       Banners em Exibição no App (Máx 5 ativos mais recentes)
                     </h3>
                     {(() => {
-                      const todayStr = getTodayStr();
                       const activeBanners = bannersHook.banners
-                        .filter(b => b.status === 'active' && b.data_expiracao >= todayStr)
+                        .filter(b => b.status === 'Ativo')
                         .slice(0, 5);
 
                       if (activeBanners.length === 0) {
@@ -2132,8 +2331,13 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                     </a>
                                   </div>
                                 )}
-                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <Calendar size={12} /> Expira em: {new Date(banner.data_expiracao).toLocaleDateString()}
+                                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Calendar size={10} /> Início: {new Date(banner.data_inicializacao).toLocaleDateString()}
+                                  </span>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Calendar size={10} /> Expira em: {new Date(banner.data_expiracao).toLocaleDateString()}
+                                  </span>
                                 </div>
                               </div>
                               <div style={{ display: 'flex', borderTop: '1px solid var(--border-light)' }}>
@@ -2141,7 +2345,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                   onClick={() => handleToggleBannerStatus(banner)}
                                   style={{ flex: 1, padding: '10px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', fontSize: '12px', cursor: 'pointer', fontWeight: 600 }}
                                 >
-                                  Expirar
+                                  Desativar
                                 </button>
                                 <button
                                   onClick={() => handleOpenEditBanner(banner)}
@@ -2165,8 +2369,117 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     })()}
                   </div>
 
+                  {/* Banners Agendados */}
+                  <div style={{ marginBottom: '32px' }}>
+                    <h3 style={{ fontSize: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }}></span>
+                      Banners Agendados
+                    </h3>
+                    {(() => {
+                      const scheduledBannersAll = bannersHook.banners
+                        .filter(b => b.status === 'Agendado')
+                        .sort((a, b) => a.data_inicializacao.localeCompare(b.data_inicializacao));
+
+                      const scheduledBannersToShow = scheduledBannersAll.slice(0, scheduledLimit);
+                      const hasMoreScheduled = scheduledBannersAll.length > scheduledBannersToShow.length;
+
+                      if (scheduledBannersAll.length === 0) {
+                        return (
+                          <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', textAlign: 'center' }}>
+                            Nenhum banner agendado no momento.
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+                            {scheduledBannersToShow.map((banner) => (
+                              <div
+                                key={banner.id}
+                                className="banner-active-card"
+                                style={{
+                                  backgroundColor: 'var(--bg-card)',
+                                  borderRadius: 'var(--radius-md)',
+                                  border: '1px solid var(--border-light)',
+                                  overflow: 'hidden',
+                                  display: 'flex',
+                                  flexDirection: 'column'
+                                }}
+                              >
+                                <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', backgroundColor: '#f0f0f0' }}>
+                                  <img
+                                    src={banner.image_url}
+                                    alt={banner.title || 'Banner'}
+                                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                                  />
+                                  <span className="badge badge-info" style={{ position: 'absolute', top: '10px', right: '10px', backgroundColor: '#3b82f6' }}>
+                                    Agendado
+                                  </span>
+                                </div>
+                                <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <h4 style={{ fontSize: '15px', fontWeight: 600 }}>{banner.title || 'Sem título'}</h4>
+                                  <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{banner.subtitle || 'Sem subtítulo'}</p>
+                                  {banner.link_url && (
+                                    <div style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)' }}>
+                                      <LinkIcon size={12} />
+                                      <a href={banner.link_url} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>
+                                        {banner.link_label || 'Ver Mais'}
+                                      </a>
+                                    </div>
+                                  )}
+                                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <Calendar size={10} /> Início: {new Date(banner.data_inicializacao).toLocaleDateString()}
+                                    </span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <Calendar size={10} /> Expira em: {new Date(banner.data_expiracao).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', borderTop: '1px solid var(--border-light)' }}>
+                                  <button
+                                    onClick={() => handleToggleBannerStatus(banner)}
+                                    style={{ flex: 1, padding: '10px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', fontSize: '12px', cursor: 'pointer', fontWeight: 600 }}
+                                  >
+                                    Desativar
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenEditBanner(banner)}
+                                    style={{ padding: '10px 16px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', cursor: 'pointer', color: 'var(--text-muted)' }}
+                                    title="Editar"
+                                  >
+                                    <Edit2 size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => bannersHook.deleteBanner(banner.id)}
+                                    style={{ padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}
+                                    title="Excluir"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          {hasMoreScheduled && (
+                            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '24px' }}>
+                              <button
+                                className="btn btn-secondary"
+                                onClick={() => setScheduledLimit(prev => prev + 5)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 20px', fontWeight: 600 }}
+                              >
+                                <Plus size={14} /> Mais
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+
                   {/* Histórico de Banners / Banners Expirados */}
-                  <div>
+                  {/* <div>
                     <h3 style={{ fontSize: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--text-muted)' }}></span>
                       Histórico de Banners / Não Exibidos (Expirados ou Inativos)
@@ -2175,11 +2488,13 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       const todayStr = getTodayStr();
                       // Top 5 active banners IDs
                       const activeBannersIds = bannersHook.banners
-                        .filter(b => b.status === 'active' && b.data_expiracao >= todayStr)
+                        .filter(b => b.status === 'Ativo')
                         .slice(0, 5)
                         .map(b => b.id);
 
-                      const historicalBanners = bannersHook.banners.filter(b => !activeBannersIds.includes(b.id));
+                      const historicalBanners = bannersHook.banners.filter(
+                        b => !activeBannersIds.includes(b.id) && b.status !== 'Agendado'
+                      );
 
                       if (historicalBanners.length === 0) {
                         return (
@@ -2204,7 +2519,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                         </div>
                       );
                     })()}
-                  </div>
+                  </div> */}
                 </>
               )}
             </div>
@@ -2692,16 +3007,28 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 </div>
               </div>
 
-              <div className="form-group">
-                <label>Data de Expiração</label>
-                <input
-                  type="date"
-                  className="input-field"
-                  value={bannerExpiration}
-                  onChange={(e) => setBannerExpiration(e.target.value)}
-                  min={getTodayStr()}
-                  required
-                />
+              <div className="grid-2">
+                <div className="form-group">
+                  <label>Data de Inicialização</label>
+                  <input
+                    type="date"
+                    className="input-field"
+                    value={bannerInitialization}
+                    onChange={(e) => setBannerInitialization(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Data de Expiração</label>
+                  <input
+                    type="date"
+                    className="input-field"
+                    value={bannerExpiration}
+                    onChange={(e) => setBannerExpiration(e.target.value)}
+                    min={bannerInitialization || getTodayStr()}
+                    required
+                  />
+                </div>
               </div>
 
               <div className="grid-2">

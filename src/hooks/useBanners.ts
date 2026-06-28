@@ -11,8 +11,8 @@ export function useBanners() {
   const [loading, setLoading] = useState(false);
   const [errorState, setErrorState] = useState<Error | null>(null);
 
-  const [scopeFilter, setScopeFilter] = useState<string>('all');
-  const [countryFilter, setCountryFilter] = useState<string>('all');
+  const [scopeFilter, setScopeFilter] = useState<string>('national');
+  const [countryFilter, setCountryFilter] = useState<string>('Brazil');
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [cityFilter, setCityFilter] = useState<string>('');
 
