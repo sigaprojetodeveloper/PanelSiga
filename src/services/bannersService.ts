@@ -12,7 +12,8 @@ export const bannersService = {
   }) {
     let query = supabase
       .from('banners')
-      .select('*');
+      .select('*')
+      .neq('status', 'deleted');
 
     query = applyBannerFilters(query, params);
 
@@ -44,9 +45,8 @@ export const bannersService = {
   },
 
   async deleteBanner(id: string) {
-    const { error } = await supabase
-      .from('banners')
-      .delete()
+    const { error } = await (supabase.from('banners') as any)
+      .update({ status: 'deleted' })
       .eq('id', id);
 
     if (error) throw error;

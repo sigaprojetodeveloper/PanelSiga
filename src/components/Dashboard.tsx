@@ -377,35 +377,33 @@ interface HistoricalBannerCardProps {
   banner: any;
   todayStr: string;
   onToggleStatus: (banner: any) => void;
-  onEdit: (banner: any) => void;
-  onDelete: (id: string) => void;
+  onDelete: (banner: any) => void;
 }
 
 function HistoricalBannerCard({
   banner,
   todayStr,
   onToggleStatus,
-  onEdit,
   onDelete
 }: HistoricalBannerCardProps) {
   const title = banner.title || 'Sem título';
   const subtitle = banner.subtitle || 'Sem subtítulo';
   const linkLabel = banner.link_label || 'Ver Mais';
-  const toggleText = (banner.status === 'Ativo' || banner.status === 'Agendado') ? 'Desativar' : 'Reativar';
+  const toggleText = (banner.status === 'active' || banner.status === 'scheduled') ? 'Desativar' : 'Reativar';
 
   let badgeClass = 'badge-warning';
   let badgeBg: string | undefined = undefined;
   let badgeText = 'Ativo (Fora do Top 5)';
 
-  if (banner.status === 'Agendado') {
+  if (banner.status === 'scheduled') {
     badgeClass = 'badge-info';
     badgeBg = '#3b82f6';
     badgeText = 'Agendado';
-  } else if (banner.status === 'Expirado') {
+  } else if (banner.status === 'expired') {
     badgeClass = 'badge-danger';
     badgeBg = '#6b7280';
     badgeText = 'Expirado';
-  } else if (banner.status === 'Desativado') {
+  } else if (banner.status === 'deactivated') {
     badgeClass = 'badge-danger';
     badgeBg = '#ef4444';
     badgeText = 'Desativado';
@@ -446,10 +444,10 @@ function HistoricalBannerCard({
         )}
         <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Calendar size={10} /> Início: {new Date(banner.data_inicializacao).toLocaleDateString()}
+            <Calendar size={10} /> Início: {new Date(banner.initialization_date).toLocaleDateString()}
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Calendar size={10} /> Expira em: {new Date(banner.data_expiracao).toLocaleDateString()}
+            <Calendar size={10} /> Expira em: {new Date(banner.expiration_date).toLocaleDateString()}
           </span>
         </div>
       </div>
@@ -461,14 +459,7 @@ function HistoricalBannerCard({
           {toggleText}
         </button>
         <button
-          onClick={() => onEdit(banner)}
-          style={{ padding: '10px 16px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', cursor: 'pointer', color: 'var(--text-muted)' }}
-          title="Editar"
-        >
-          <Edit2 size={14} />
-        </button>
-        <button
-          onClick={() => onDelete(banner.id)}
+          onClick={() => onDelete(banner)}
           style={{ padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}
           title="Excluir"
         >
@@ -485,7 +476,8 @@ interface ChannelRowProps {
   onSelect: (id: string) => void;
   onToggleDestaque: (id: string, current: boolean) => void;
   onToggleActive: (id: string, current: boolean) => void;
-  onDelete: (id: string) => void;
+  onEdit: (channel: any) => void;
+  onDelete: (channel: any) => void;
 }
 
 function ChannelRow({
@@ -494,11 +486,12 @@ function ChannelRow({
   onSelect,
   onToggleDestaque,
   onToggleActive,
+  onEdit,
   onDelete
 }: ChannelRowProps) {
   const activeCount = (ch.story_items || []).filter((item: any) =>
     item.status === 'active' &&
-    item.data_expiracao >= getTodayStr()
+    item.expiration_date >= getTodayStr()
   ).length;
 
   return (
@@ -522,12 +515,12 @@ function ChannelRow({
           <img src={ch.avatar_url} alt={ch.name} style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
         ) : (
           <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 600 }}>
-            {ch.name[0]}
+            {(ch.name || '?')[0]}
           </div>
         )}
         <div>
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-            <span style={{ fontWeight: 600, fontSize: '14px', color: isSelected ? 'var(--primary)' : 'inherit' }}>{ch.name}</span>
+            <span style={{ fontWeight: 600, fontSize: '14px', color: isSelected ? 'var(--primary)' : 'inherit' }}>{ch.name || 'Sem nome'}</span>
             {ch.state ? (
               <span
                 style={{
@@ -590,9 +583,17 @@ function ChannelRow({
             {ch.is_active ? 'Desativar' : 'Ativar'}
           </button>
           <button
+            className="btn btn-secondary btn-sm"
+            style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => onEdit(ch)}
+            title="Editar"
+          >
+            <Edit2 size={14} />
+          </button>
+          <button
             className="btn btn-danger btn-sm"
             style={{ padding: '4px 8px', color: 'var(--danger)', background: 'transparent' }}
-            onClick={() => onDelete(ch.id)}
+            onClick={() => onDelete(ch)}
           >
             <Trash2 size={14} />
           </button>
@@ -618,6 +619,22 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const bannersHook = useBanners();
 
   const currentUserEmail = adminUsername;
+
+  // Custom Confirmation Modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => { }
+  });
+
+  // Edit channel state
+  const [editChannelId, setEditChannelId] = useState<string | null>(null);
 
   // Modals state
   const [userModalOpen, setUserModalOpen] = useState(false);
@@ -733,19 +750,131 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setEditUserModalOpen(false);
   };
 
+  const handleDeleteChannel = (ch: any) => {
+    if (ch.user_id) {
+      warning('Este canal está vinculado a um usuário e não pode ser excluído.');
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Excluir Canal de Stories',
+      message: 'Deseja realmente excluir este canal? Todos os stories vinculados serão deletados.',
+      onConfirm: async () => {
+        try {
+          await storyHook.deleteChannelRaw(ch.id);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    });
+  };
+
+  const handleEditChannelClick = (ch: any) => {
+    if (ch.user_id) {
+      warning('Este canal está vinculado a um usuário e não pode ser editado.');
+      return;
+    }
+
+    setEditChannelId(ch.id);
+    setNewChannelName(ch.name);
+    setNewChannelAvatar(ch.avatar_url || '');
+    setNewChannelDestaque(ch.is_destaque);
+    setNewChannelScope(ch.scope);
+    setNewChannelCountry(ch.country || 'Brazil');
+    setNewChannelState(ch.state || '');
+    setNewChannelCity(ch.city || '');
+    setAddChannelModalOpen(true);
+  };
+
+  const handleDeleteStoryClick = (item: any) => {
+    if (selectedChannel?.user_id) {
+      warning('Este story pertence a um canal vinculado a um usuário e não pode ser removido.');
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Excluir Story',
+      message: 'Deseja realmente excluir este story?',
+      onConfirm: async () => {
+        try {
+          await storyHook.deleteItemRaw(item.id);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    });
+  };
+
+  const handleExpireStoryClick = (item: any) => {
+    if (selectedChannel?.user_id || item.user_id) {
+      warning('Este story pertence a um canal vinculado a um usuário e não pode ser expirado.');
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: item.status === 'active' ? 'Expirar Story' : 'Ativar Story',
+      message: `Deseja realmente ${item.status === 'active' ? 'expirar' : 'ativar'} este story?`,
+      onConfirm: async () => {
+        try {
+          await storyHook.updateItemStatus(item.id, item.status === 'active' ? 'expired' : 'active');
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    });
+  };
+
+  const handleDeleteBannerClick = (banner: any) => {
+    if (banner.user_id) {
+      warning('Este banner está vinculado a um usuário e não pode ser excluído.');
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Excluir Banner',
+      message: 'Deseja realmente excluir este banner?',
+      onConfirm: async () => {
+        try {
+          await bannersHook.deleteBannerRaw(banner.id);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    });
+  };
+
   const handleCreateChannel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newChannelName) return;
-    await storyHook.createChannel({
+
+    const channelData = {
       name: newChannelName,
       avatar_url: newChannelAvatar || null,
       is_destaque: newChannelDestaque,
-      is_active: true,
       scope: newChannelScope,
       country: newChannelScope !== 'global' ? newChannelCountry || null : null,
       state: (newChannelScope === 'state' || newChannelScope === 'city') ? newChannelState || null : null,
       city: newChannelScope === 'city' ? newChannelCity || null : null
-    });
+    } as any;
+
+    try {
+      if (editChannelId) {
+        await storyHook.updateChannel(editChannelId, channelData);
+        success('Canal atualizado com sucesso!');
+      } else {
+        await storyHook.createChannel({ ...channelData, is_active: true });
+        success('Canal criado com sucesso!');
+      }
+    } catch (err: any) {
+      console.error(err);
+      error('Ocorreu um erro ao salvar o canal: ' + err.message);
+    }
+
+    setEditChannelId(null);
     setNewChannelName('');
     setNewChannelAvatar('');
     setNewChannelDestaque(false);
@@ -781,7 +910,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setNewStoryLinkCustomRoute(parsed.customRoute);
 
     setNewStoryLinkLabel(item.link_label || '');
-    setNewStoryExpiration(item.data_expiracao);
+    setNewStoryExpiration(item.expiration_date);
     setAddStoryModalOpen(true);
   };
 
@@ -816,8 +945,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       media_type: newStoryMediaType,
       link_url: assembledLink,
       link_label: finalLabel,
-      status: (newStoryExpiration < todayStr ? 'expired' : 'active') as 'active' | 'expired',
-      data_expiracao: newStoryExpiration
+      status: 'active' as 'active' | 'expired',
+      expiration_date: newStoryExpiration
     };
 
     try {
@@ -869,8 +998,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setBannerLinkCustomRoute(parsed.customRoute);
 
     setBannerLinkLabel(banner.link_label || '');
-    setBannerInitialization(banner.data_inicializacao || getTodayStr());
-    setBannerExpiration(banner.data_expiracao);
+    setBannerInitialization(banner.initialization_date || getTodayStr());
+    setBannerExpiration(banner.expiration_date);
     setBannerAspectWarning(false);
     setBannerScope(banner.scope || 'global');
     setBannerCountry(banner.country || 'Brazil');
@@ -898,17 +1027,19 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       country: string | null;
       state: string | null;
       city: string | null;
-      data_inicializacao: string;
+      initialization_date: string;
+      expiration_date: string;
     }
   ): Promise<{ allowed: boolean; message?: string }> => {
-    const dateToCheck = targetBanner.data_inicializacao;
+    const startStr = targetBanner.initialization_date;
+    const endStr = targetBanner.expiration_date;
 
     const { data: activeBanners, error: queryError } = await supabase
       .from('banners')
       .select('*')
-      .in('status', ['Ativo', 'Agendado'])
-      .lte('data_inicializacao', dateToCheck)
-      .gte('data_expiracao', dateToCheck);
+      .in('status', ['active', 'scheduled'])
+      .lte('initialization_date', endStr)
+      .gte('expiration_date', startStr);
 
     if (queryError) {
       throw new Error('Falha ao validar disponibilidade: ' + queryError.message);
@@ -938,41 +1069,49 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       return false;
     };
 
-    const isOverlapping = (b1: any, b2: any) => isAncestor(b1, b2) || isAncestor(b2, b1);
+    const isOverlappingGeo = (b1: any, b2: any) => isAncestor(b1, b2) || isAncestor(b2, b1);
 
-    const overlapping = otherBanners.filter(b => isOverlapping(b, targetBanner));
-    const candidates = [...overlapping, targetBanner];
+    const geoOverlapping = otherBanners.filter(b => isOverlappingGeo(b, targetBanner));
 
-    let maxCount = 0;
-    let blockedNode: any = null;
-    let ancestorsOfBlockedNode: any[] = [];
-
-    for (const candidate of candidates) {
-      const ancestors = candidates.filter(c => isAncestor(c, candidate));
-      if (ancestors.length > maxCount) {
-        maxCount = ancestors.length;
-        if (maxCount > 5) {
-          blockedNode = candidate;
-          ancestorsOfBlockedNode = ancestors.filter(c => c.id !== targetBanner.id);
-        }
+    const criticalDates = new Set<string>();
+    criticalDates.add(startStr);
+    for (const b of geoOverlapping) {
+      if (b.initialization_date >= startStr && b.initialization_date <= endStr) {
+        criticalDates.add(b.initialization_date);
       }
     }
 
-    if (maxCount > 5) {
-      let minExpDate = '';
-      for (const b of ancestorsOfBlockedNode) {
-        if (!minExpDate || b.data_expiracao < minExpDate) {
-          minExpDate = b.data_expiracao;
+    for (const date of Array.from(criticalDates)) {
+      const activeOnDate = geoOverlapping.filter(
+        b => b.initialization_date <= date && b.expiration_date >= date
+      );
+
+      const candidates = [...activeOnDate, targetBanner];
+
+      let maxHierarchicalCount = 0;
+      for (const candidate of candidates) {
+        const ancestors = candidates.filter(c => isAncestor(c, candidate));
+        if (ancestors.length > maxHierarchicalCount) {
+          maxHierarchicalCount = ancestors.length;
         }
       }
 
-      const nextDay = getNextDay(minExpDate);
-      const formattedNextDay = formatToDDMMYYYY(nextDay);
+      if (maxHierarchicalCount > 5) {
+        let minExpDate = '';
+        for (const b of activeOnDate) {
+          if (!minExpDate || b.expiration_date < minExpDate) {
+            minExpDate = b.expiration_date;
+          }
+        }
 
-      return {
-        allowed: false,
-        message: `Já existem 5 banners ativos para esta abrangência na data selecionada. A primeira data disponível para publicação é ${formattedNextDay}.`
-      };
+        const nextDay = getNextDay(minExpDate || date);
+        const formattedNextDay = formatToDDMMYYYY(nextDay);
+
+        return {
+          allowed: false,
+          message: `O limite de 5 banners ativos para esta abrangência seria excedido no dia ${formatToDDMMYYYY(date)}. A primeira data de liberação prevista é ${formattedNextDay}.`
+        };
+      }
     }
 
     return { allowed: true };
@@ -1006,7 +1145,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       country: bannerScope !== 'global' ? bannerCountry || null : null,
       state: (bannerScope === 'state' || bannerScope === 'city') ? bannerState || null : null,
       city: bannerScope === 'city' ? bannerCity || null : null,
-      data_inicializacao: bannerInitialization,
+      initialization_date: bannerInitialization,
+      expiration_date: bannerExpiration,
     };
 
     try {
@@ -1017,13 +1157,15 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       }
 
       const todayStr = getTodayStr();
-      let finalStatus: 'Agendado' | 'Ativo' | 'Expirado' | 'Desativado' = 'Ativo';
-      if (bannerInitialization > todayStr) {
-        finalStatus = 'Agendado';
-      } else if (bannerExpiration < todayStr) {
-        finalStatus = 'Expirado';
+      const initDate = new Date(bannerInitialization + 'T00:00:00');
+      const todayDate = new Date(todayStr + 'T00:00:00');
+      const expDate = new Date(bannerExpiration + 'T00:00:00');
+
+      let finalStatus: 'scheduled' | 'active' = 'active';
+      if (initDate > todayDate) {
+        finalStatus = 'scheduled';
       } else {
-        finalStatus = 'Ativo';
+        finalStatus = 'active';
       }
 
       const bannerData = {
@@ -1033,8 +1175,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
         link_url: assembledLink,
         link_label: finalLabel,
         status: finalStatus,
-        data_inicializacao: bannerInitialization,
-        data_expiracao: bannerExpiration,
+        initialization_date: bannerInitialization,
+        expiration_date: bannerExpiration,
         scope: bannerScope,
         country: targetBanner.country,
         state: targetBanner.state,
@@ -1058,25 +1200,32 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const handleToggleBannerStatus = async (banner: any) => {
     const todayStr = getTodayStr();
 
-    if (banner.status === 'Ativo' || banner.status === 'Agendado') {
-      try {
-        await bannersHook.updateBanner(banner.id, { status: 'Desativado' });
-        success('Banner desativado com sucesso!');
-      } catch (err: any) {
-        console.error(err);
-        error('Falha ao desativar banner: ' + err.message);
-      }
+    if (banner.status === 'active' || banner.status === 'scheduled') {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Desativar Banner',
+        message: 'Deseja realmente desativar este banner?',
+        onConfirm: async () => {
+          try {
+            await bannersHook.updateBanner(banner.id, { status: 'deactivated' });
+            success('Banner desativado com sucesso!');
+          } catch (err: any) {
+            console.error(err);
+            error('Falha ao desativar banner: ' + err.message);
+          }
+        }
+      });
       return;
     }
 
-    let targetExpDate = banner.data_expiracao;
+    let targetExpDate = banner.expiration_date;
     if (targetExpDate < todayStr) {
       const nextMonth = new Date();
       nextMonth.setDate(nextMonth.getDate() + 30);
       targetExpDate = nextMonth.toISOString().split('T')[0];
     }
 
-    const targetInitDate = banner.data_inicializacao > todayStr ? banner.data_inicializacao : todayStr;
+    const targetInitDate = banner.initialization_date > todayStr ? banner.initialization_date : todayStr;
 
     const targetBanner = {
       id: banner.id,
@@ -1084,7 +1233,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       country: banner.country,
       state: banner.state,
       city: banner.city,
-      data_inicializacao: targetInitDate
+      initialization_date: targetInitDate,
+      expiration_date: targetExpDate
     };
 
     try {
@@ -1094,19 +1244,23 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
         return;
       }
 
-      let finalStatus: 'Agendado' | 'Ativo' | 'Expirado' | 'Desativado' = 'Ativo';
-      if (targetInitDate > todayStr) {
-        finalStatus = 'Agendado';
-      } else if (targetExpDate < todayStr) {
-        finalStatus = 'Expirado';
+      const initDate = new Date(targetInitDate + 'T00:00:00');
+      const todayDate = new Date(todayStr + 'T00:00:00');
+      const expDate = new Date(targetExpDate + 'T00:00:00');
+
+      let finalStatus: 'scheduled' | 'active' | 'expired' | 'deactivated' = 'active';
+      if (initDate > todayDate) {
+        finalStatus = 'scheduled';
+      } else if (expDate < todayDate) {
+        finalStatus = 'expired';
       } else {
-        finalStatus = 'Ativo';
+        finalStatus = 'active';
       }
 
       await bannersHook.updateBanner(banner.id, {
         status: finalStatus,
-        data_inicializacao: targetInitDate,
-        data_expiracao: targetExpDate
+        initialization_date: targetInitDate,
+        expiration_date: targetExpDate
       });
       success('Banner reativado com sucesso!');
     } catch (err: any) {
@@ -1135,7 +1289,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     customRoute: string,
     setCustomRoute: (v: string) => void,
     linkLabel: string,
-    setLinkLabel: (v: string) => void
+    setLinkLabel: (v: string) => void,
+    maxLinkLabelLength: number = 50
   ) => {
     return (
       <>
@@ -1166,8 +1321,11 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               value={linkLabel}
               onChange={(e) => setLinkLabel(e.target.value)}
               placeholder="Ex: Saiba Mais, Falar Conosco"
-              maxLength={50}
+              maxLength={maxLinkLabelLength}
             />
+            <span style={{ display: 'block', textAlign: 'right', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              {linkLabel.length}/{maxLinkLabelLength}
+            </span>
           </div>
         </div>
 
@@ -1340,7 +1498,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               {activeTab === 'overview' && 'Visão Geral'}
               {activeTab === 'users' && 'Gerenciamento de Usuários'}
               {activeTab === 'stories' && 'Publicações e Stories'}
-              {activeTab === 'banners' && 'Gerenciamento de Banners'}
+              {activeTab === 'banners' && 'Banners'}
               {activeTab === 'reports' && 'Painel de Denúncias e Moderação'}
               {activeTab === 'settings' && 'Configurações do Sistema'}
             </h2>
@@ -1785,8 +1943,32 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                             }
                           }}
                           onToggleDestaque={(id, current) => storyHook.updateChannel(id, { is_destaque: !current })}
-                          onToggleActive={(id, current) => storyHook.updateChannel(id, { is_active: !current })}
-                          onDelete={(id) => storyHook.deleteChannel(id)}
+                          onToggleActive={(id, current) => {
+                            if (current) {
+                              if (ch.user_id) {
+                                warning('Este canal está vinculado a um usuário e não pode ser desativado.');
+                                return;
+                              }
+                              setConfirmModal({
+                                isOpen: true,
+                                title: 'Desativar Canal',
+                                message: 'Deseja realmente desativar este canal de stories?',
+                                onConfirm: async () => {
+                                  try {
+                                    await storyHook.updateChannel(id, { is_active: false, status: 'deactivated' });
+                                    success('Canal desativado com sucesso!');
+                                  } catch (err: any) {
+                                    console.error(err);
+                                    error('Falha ao desativar canal: ' + err.message);
+                                  }
+                                }
+                              });
+                            } else {
+                              storyHook.updateChannel(id, { is_active: true, status: 'active' });
+                            }
+                          }}
+                          onEdit={handleEditChannelClick}
+                          onDelete={handleDeleteChannel}
                         />
                       ))}
                     </div>
@@ -1840,7 +2022,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '16px' }}>
                       {storyHook.items.map((item: any) => {
                         const todayStr = getTodayStr();
-                        const isExpired = item.data_expiracao < todayStr;
+                        const isExpired = item.expiration_date < todayStr;
 
                         return (
                           <div
@@ -1942,60 +2124,68 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                 </a>
                               )}
                               <span style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <Calendar size={10} /> Expira em: {new Date(item.data_expiracao).toLocaleDateString()}
+                                <Calendar size={10} /> Expira em: {new Date(item.expiration_date).toLocaleDateString()}
                               </span>
                             </div>
 
                             <div style={{ display: 'flex', borderTop: '1px solid var(--border-light)' }}>
-                              <button
-                                onClick={() => storyHook.updateItemStatus(item.id, item.status === 'active' ? 'expired' : 'active')}
-                                style={{
-                                  flex: 1,
-                                  padding: '8px',
-                                  background: 'none',
-                                  border: 'none',
-                                  borderRight: '1px solid var(--border-light)',
-                                  fontSize: '11px',
-                                  cursor: 'pointer',
-                                  color: 'var(--text-main)',
-                                  fontWeight: 500
-                                }}
-                              >
-                                {item.status === 'active' ? 'Expirar' : 'Ativar'}
-                              </button>
-                              <button
-                                onClick={() => handleOpenEditStory(item)}
-                                style={{
-                                  padding: '8px 10px',
-                                  background: 'none',
-                                  border: 'none',
-                                  borderRight: '1px solid var(--border-light)',
-                                  cursor: 'pointer',
-                                  color: 'var(--text-muted)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center'
-                                }}
-                                title="Editar"
-                              >
-                                <Edit2 size={12} />
-                              </button>
-                              <button
-                                onClick={() => storyHook.deleteItem(item.id)}
-                                style={{
-                                  padding: '8px 10px',
-                                  background: 'none',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  color: 'var(--danger)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center'
-                                }}
-                                title="Excluir"
-                              >
-                                <Trash2 size={12} />
-                              </button>
+                              {!(isExpired && item.status !== 'active') ? (
+                                <>
+                                  <button
+                                    onClick={() => handleExpireStoryClick(item)}
+                                    style={{
+                                      flex: 1,
+                                      padding: '8px',
+                                      background: 'none',
+                                      border: 'none',
+                                      borderRight: '1px solid var(--border-light)',
+                                      fontSize: '11px',
+                                      cursor: 'pointer',
+                                      color: 'var(--text-main)',
+                                      fontWeight: 500
+                                    }}
+                                  >
+                                    {item.status === 'active' ? 'Expirar' : 'Ativar'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteStoryClick(item)}
+                                    style={{
+                                      padding: '8px 16px',
+                                      background: 'none',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      color: 'var(--danger)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center'
+                                    }}
+                                    title="Excluir"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => handleDeleteStoryClick(item)}
+                                  style={{
+                                    flex: 1,
+                                    padding: '8px',
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: 'var(--danger)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px',
+                                    fontWeight: 600,
+                                    fontSize: '11px'
+                                  }}
+                                  title="Excluir"
+                                >
+                                  <Trash2 size={12} /> Excluir Story
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
@@ -2284,7 +2474,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     </h3>
                     {(() => {
                       const activeBanners = bannersHook.banners
-                        .filter(b => b.status === 'Ativo')
+                        .filter(b => b.status === 'active')
                         .slice(0, 5);
 
                       if (activeBanners.length === 0) {
@@ -2333,10 +2523,10 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                 )}
                                 <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <Calendar size={10} /> Início: {new Date(banner.data_inicializacao).toLocaleDateString()}
+                                    <Calendar size={10} /> Início: {new Date(banner.initialization_date).toLocaleDateString()}
                                   </span>
                                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <Calendar size={10} /> Expira em: {new Date(banner.data_expiracao).toLocaleDateString()}
+                                    <Calendar size={10} /> Expira em: {new Date(banner.expiration_date).toLocaleDateString()}
                                   </span>
                                 </div>
                               </div>
@@ -2348,15 +2538,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                   Desativar
                                 </button>
                                 <button
-                                  onClick={() => handleOpenEditBanner(banner)}
-                                  style={{ padding: '10px 16px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', cursor: 'pointer', color: 'var(--text-muted)' }}
-                                  title="Editar"
-                                >
-                                  <Edit2 size={14} />
-                                </button>
-                                <button
-                                  onClick={() => bannersHook.deleteBanner(banner.id)}
-                                  style={{ padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}
+                                  onClick={() => handleDeleteBannerClick(banner)}
+                                  style={{ padding: '10px 20px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}
                                   title="Excluir"
                                 >
                                   <Trash2 size={14} />
@@ -2377,8 +2560,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     </h3>
                     {(() => {
                       const scheduledBannersAll = bannersHook.banners
-                        .filter(b => b.status === 'Agendado')
-                        .sort((a, b) => a.data_inicializacao.localeCompare(b.data_inicializacao));
+                        .filter(b => b.status === 'scheduled')
+                        .sort((a, b) => a.initialization_date.localeCompare(b.initialization_date));
 
                       const scheduledBannersToShow = scheduledBannersAll.slice(0, scheduledLimit);
                       const hasMoreScheduled = scheduledBannersAll.length > scheduledBannersToShow.length;
@@ -2430,10 +2613,10 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                   )}
                                   <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      <Calendar size={10} /> Início: {new Date(banner.data_inicializacao).toLocaleDateString()}
+                                      <Calendar size={10} /> Início: {new Date(banner.initialization_date).toLocaleDateString()}
                                     </span>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      <Calendar size={10} /> Expira em: {new Date(banner.data_expiracao).toLocaleDateString()}
+                                      <Calendar size={10} /> Expira em: {new Date(banner.expiration_date).toLocaleDateString()}
                                     </span>
                                   </div>
                                 </div>
@@ -2445,15 +2628,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                     Desativar
                                   </button>
                                   <button
-                                    onClick={() => handleOpenEditBanner(banner)}
-                                    style={{ padding: '10px 16px', background: 'none', border: 'none', borderRight: '1px solid var(--border-light)', cursor: 'pointer', color: 'var(--text-muted)' }}
-                                    title="Editar"
-                                  >
-                                    <Edit2 size={14} />
-                                  </button>
-                                  <button
-                                    onClick={() => bannersHook.deleteBanner(banner.id)}
-                                    style={{ padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}
+                                    onClick={() => handleDeleteBannerClick(banner)}
+                                    style={{ padding: '10px 20px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}
                                     title="Excluir"
                                   >
                                     <Trash2 size={14} />
@@ -2488,12 +2664,12 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       const todayStr = getTodayStr();
                       // Top 5 active banners IDs
                       const activeBannersIds = bannersHook.banners
-                        .filter(b => b.status === 'Ativo')
+                        .filter(b => b.status === 'active')
                         .slice(0, 5)
                         .map(b => b.id);
 
                       const historicalBanners = bannersHook.banners.filter(
-                        b => !activeBannersIds.includes(b.id) && b.status !== 'Agendado'
+                        b => !activeBannersIds.includes(b.id) && b.status !== 'scheduled'
                       );
 
                       if (historicalBanners.length === 0) {
@@ -2512,8 +2688,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                               banner={banner}
                               todayStr={todayStr}
                               onToggleStatus={handleToggleBannerStatus}
-                              onEdit={handleOpenEditBanner}
-                              onDelete={bannersHook.deleteBanner}
+                              onDelete={handleDeleteBannerClick}
                             />
                           ))}
                         </div>
@@ -2667,12 +2842,15 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
             <button className="modal-close" onClick={() => setAddChannelModalOpen(false)}>
               <X size={20} />
             </button>
-            <h3 className="modal-title">Novo Canal de Stories</h3>
+            <h3 className="modal-title">{editChannelId ? 'Editar Canal de Stories' : 'Novo Canal de Stories'}</h3>
 
             <form onSubmit={handleCreateChannel}>
               <div className="form-group">
                 <label>Nome do Canal</label>
-                <input type="text" className="input-field" value={newChannelName} onChange={(e) => setNewChannelName(e.target.value)} placeholder="Ex: Siga Construtora" maxLength={50} required />
+                <input type="text" className="input-field" value={newChannelName} onChange={(e) => setNewChannelName(e.target.value)} placeholder="Ex: Siga Construtora" maxLength={15} required />
+                <span style={{ display: 'block', textAlign: 'right', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {newChannelName.length}/15
+                </span>
               </div>
               <div className="form-group">
                 <label>Avatar do Canal (Recortado na proporção 1:1)</label>
@@ -2692,6 +2870,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   <select
                     className="select-field"
                     value={newChannelScope}
+                    disabled={!!editChannelId}
                     onChange={(e) => {
                       const val = e.target.value as any;
                       setNewChannelScope(val);
@@ -2720,6 +2899,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     <select
                       className="select-field"
                       value={newChannelCountry}
+                      disabled={!!editChannelId}
                       onChange={(e) => {
                         setNewChannelCountry(e.target.value);
                         setNewChannelState('');
@@ -2743,6 +2923,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     <select
                       className="select-field"
                       value={newChannelState}
+                      disabled={!!editChannelId}
                       onChange={(e) => {
                         setNewChannelState(e.target.value);
                         setNewChannelCity('');
@@ -2766,6 +2947,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       <select
                         className="select-field"
                         value={newChannelCity}
+                        disabled={!!editChannelId}
                         onChange={(e) => setNewChannelCity(e.target.value)}
                         required
                       >
@@ -2791,7 +2973,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setAddChannelModalOpen(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">Criar Canal</button>
+                <button type="submit" className="btn btn-primary">{editChannelId ? 'Salvar Alterações' : 'Criar Canal'}</button>
               </div>
             </form>
           </div>
@@ -2864,7 +3046,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 newStoryLinkCustomRoute,
                 setNewStoryLinkCustomRoute,
                 newStoryLinkLabel,
-                setNewStoryLinkLabel
+                setNewStoryLinkLabel,
+                15
               )}
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
@@ -2991,8 +3174,11 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     value={bannerTitle}
                     onChange={(e) => setBannerTitle(e.target.value)}
                     placeholder="Ex: Oferta Especial de Junho"
-                    maxLength={50}
+                    maxLength={20}
                   />
+                  <span style={{ display: 'block', textAlign: 'right', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {bannerTitle.length}/20
+                  </span>
                 </div>
                 <div className="form-group">
                   <label>Subtítulo do Banner (Opcional)</label>
@@ -3002,8 +3188,11 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     value={bannerSubtitle}
                     onChange={(e) => setBannerSubtitle(e.target.value)}
                     placeholder="Ex: Descontos de até 30% em serviços"
-                    maxLength={50}
+                    maxLength={40}
                   />
+                  <span style={{ display: 'block', textAlign: 'right', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {bannerSubtitle.length}/40
+                  </span>
                 </div>
               </div>
 
@@ -3151,7 +3340,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 bannerLinkCustomRoute,
                 setBannerLinkCustomRoute,
                 bannerLinkLabel,
-                setBannerLinkLabel
+                setBannerLinkLabel,
+                50
               )}
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
@@ -3250,6 +3440,39 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 }}
               />
             )}
+          </div>
+        </div>
+      )}
+
+      {confirmModal.isOpen && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}>
+          <div className="modal-content" style={{ maxWidth: '400px' }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}>
+              <X size={20} />
+            </button>
+            <h3 className="modal-title">{confirmModal.title}</h3>
+            <p style={{ margin: '16px 0', fontSize: '14px', color: 'var(--text-main)', lineHeight: '1.5' }}>
+              {confirmModal.message}
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={async () => {
+                  setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                  await confirmModal.onConfirm();
+                }}
+              >
+                Confirmar
+              </button>
+            </div>
           </div>
         </div>
       )}

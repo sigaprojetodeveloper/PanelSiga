@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { CheckCircle2, AlertTriangle, Info, XCircle } from 'lucide-react';
 
 export type ToastType = 'success' | 'info' | 'warning' | 'error';
@@ -10,6 +10,7 @@ export interface ToastItem {
   message: string;
   type: ToastType;
   duration?: number;
+  createdAt?: number;
 }
 
 interface ToastContextType {
@@ -29,36 +30,54 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const addToast = useCallback((message: string, type: ToastType = 'info', duration: number = 3000) => {
+  const addToast = useCallback((message: string, type: ToastType = 'info') => {
     const id = Math.random().toString(36).substring(2, 9);
-    const newToast: ToastItem = { id, message, type, duration };
+    const createdAt = performance.now();
+    const newToast: ToastItem = { id, message, type, duration: 10000, createdAt };
     
     setToasts((prev) => [...prev, newToast]);
 
     setTimeout(() => {
       removeToast(id);
-    }, duration);
+    }, 10000);
   }, [removeToast]);
 
   const toast = useCallback((message: string, type?: ToastType, duration?: number) => {
-    addToast(message, type, duration);
+    addToast(message, type);
   }, [addToast]);
 
   const success = useCallback((message: string, duration?: number) => {
-    addToast(message, 'success', duration);
+    addToast(message, 'success');
   }, [addToast]);
 
   const info = useCallback((message: string, duration?: number) => {
-    addToast(message, 'info', duration);
+    addToast(message, 'info');
   }, [addToast]);
 
   const warning = useCallback((message: string, duration?: number) => {
-    addToast(message, 'warning', duration);
+    addToast(message, 'warning');
   }, [addToast]);
 
   const error = useCallback((message: string, duration?: number) => {
-    addToast(message, 'error', duration);
+    addToast(message, 'error');
   }, [addToast]);
+
+  useEffect(() => {
+    if (toasts.length === 0) return;
+
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.toast')) {
+        const now = performance.now();
+        setToasts((prev) => prev.filter((t) => t.createdAt && (now - t.createdAt) < 100));
+      }
+    };
+
+    document.addEventListener('click', handleOutsideClick);
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+    };
+  }, [toasts]);
 
   const getIcon = (type: ToastType) => {
     switch (type) {

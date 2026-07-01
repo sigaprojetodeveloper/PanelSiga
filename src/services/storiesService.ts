@@ -22,34 +22,38 @@ export const storiesService = {
       .select('id')
       .eq('channel_id', channelId)
       .eq('status', 'active')
-      .gte('data_expiracao', todayStr);
+      .gte('expiration_date', todayStr);
       
     if (storiesError) throw storiesError;
     
-    const hasActiveStories = activeStories && activeStories.length > 0;
-    
     const { data: channel, error: channelError } = await supabase
       .from('story_channels')
-      .select('is_active')
+      .select('is_active, status')
       .eq('id', channelId)
       .single() as any;
       
     if (channelError) throw channelError;
     
-    if (channel?.is_active !== hasActiveStories) {
+    const inactiveStatuses = ['deactivated', 'deleted', 'rejected', 'pending', 'awaiting_payment', 'expired'];
+    let shouldBeActive = activeStories && activeStories.length > 0;
+    if (inactiveStatuses.includes(channel?.status)) {
+      shouldBeActive = false;
+    }
+    
+    if (channel?.is_active !== shouldBeActive) {
       const { error: updateError } = await (supabase.from('story_channels') as any)
-        .update({ is_active: hasActiveStories })
+        .update({ is_active: shouldBeActive })
         .eq('id', channelId);
       if (updateError) throw updateError;
     }
   },
-
+ 
   async syncAllChannelsStatus() {
     const todayStr = getTodayStr();
     
     const { data: channels, error: channelsError } = await supabase
       .from('story_channels')
-      .select('id, is_active') as any;
+      .select('id, is_active, status') as any;
       
     if (channelsError) throw channelsError;
     if (!channels || channels.length === 0) return;
@@ -58,14 +62,18 @@ export const storiesService = {
       .from('story_items')
       .select('channel_id')
       .eq('status', 'active')
-      .gte('data_expiracao', todayStr) as any;
+      .gte('expiration_date', todayStr) as any;
       
     if (storiesError) throw storiesError;
     
     const activeChannelIds = new Set(activeStories?.map((item: any) => item.channel_id) || []);
+    const inactiveStatuses = ['deactivated', 'deleted', 'rejected', 'pending', 'awaiting_payment', 'expired'];
     
     for (const channel of (channels as any[])) {
-      const shouldBeActive = activeChannelIds.has(channel.id);
+      let shouldBeActive = activeChannelIds.has(channel.id);
+      if (inactiveStatuses.includes(channel.status)) {
+        shouldBeActive = false;
+      }
       if (channel.is_active !== shouldBeActive) {
         await (supabase.from('story_channels') as any)
           .update({ is_active: shouldBeActive })
@@ -133,9 +141,8 @@ export const storiesService = {
   },
 
   async deleteStoryChannel(id: string) {
-    const { error } = await supabase
-      .from('story_channels')
-      .delete()
+    const { error } = await (supabase.from('story_channels') as any)
+      .update({ status: 'deleted', is_active: false })
       .eq('id', id);
 
     if (error) throw error;
@@ -214,7 +221,7 @@ export const storiesService = {
 };
 
 function applyChannelFilters(query: any, filter: string, scope?: string, country?: string, state?: string, city?: string) {
-  let q = query;
+  let q = query.neq('status', 'deleted');
   if (filter === 'active') {
     q = q.eq('is_active', true);
   } else if (filter === 'inactive') {

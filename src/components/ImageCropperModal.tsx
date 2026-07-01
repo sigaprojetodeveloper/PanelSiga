@@ -50,8 +50,8 @@ export default function ImageCropperModal({ file, aspectRatio = '9:16', onCrop, 
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
-    // Calculate scale to cover viewport (object-fit: cover equivalent)
-    const smin = Math.max(VIEWPORT_WIDTH / img.naturalWidth, VIEWPORT_HEIGHT / img.naturalHeight);
+    // Calculate scale to contain viewport (display entire image)
+    const smin = Math.min(VIEWPORT_WIDTH / img.naturalWidth, VIEWPORT_HEIGHT / img.naturalHeight);
     const w = img.naturalWidth * smin;
     const h = img.naturalHeight * smin;
     setBaseSize({ width: w, height: h });
@@ -63,7 +63,7 @@ export default function ImageCropperModal({ file, aspectRatio = '9:16', onCrop, 
   };
 
   const clamp = (val: number, min: number, max: number) => {
-    if (min > max) return 0;
+    if (min > max) return min / 2;
     return Math.min(Math.max(val, min), max);
   };
 
@@ -134,113 +134,113 @@ export default function ImageCropperModal({ file, aspectRatio = '9:16', onCrop, 
     }
   };
 
-const reduceQuality = async (
-  canvas: HTMLCanvasElement,
-  targetSize: number
-): Promise<Blob | null> => {
-  let quality = 0.9;
-  let blob: Blob | null = null;
-  const getBlob = (q: number): Promise<Blob | null> => {
-    return new Promise((resolve) => {
-      canvas.toBlob((b) => resolve(b), 'image/webp', q);
-    });
-  };
-
-  blob = await getBlob(quality);
-  // Se já for menor que 1MB, não reduz qualidade
-  if (blob && blob.size <= targetSize) {
-    return blob;
-  }
-
-  while (blob && blob.size > targetSize && quality > 0.3) {
-    quality -= 0.1;
-    blob = await getBlob(quality);
-  }
-  return blob;
-};
-
-const scaleResolution = async (
-  canvas: HTMLCanvasElement,
-  targetSize: number
-): Promise<Blob | null> => {
-  let blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob((b) => resolve(b), 'image/webp', 0.8);
-  });
-  if (!blob || blob.size <= targetSize) return blob;
-
-  let scaleDown = 0.8;
-  while (blob && blob.size > targetSize && scaleDown > 0.2) {
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = Math.round(canvas.width * scaleDown);
-    tempCanvas.height = Math.round(canvas.height * scaleDown);
-    const tempCtx = tempCanvas.getContext('2d');
-    if (tempCtx) {
-      tempCtx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height);
-      blob = await new Promise<Blob | null>((resolve) => {
-        tempCanvas.toBlob((b) => resolve(b), 'image/webp', 0.8);
+  const reduceQuality = async (
+    canvas: HTMLCanvasElement,
+    targetSize: number
+  ): Promise<Blob | null> => {
+    let quality = 0.9;
+    let blob: Blob | null = null;
+    const getBlob = (q: number): Promise<Blob | null> => {
+      return new Promise((resolve) => {
+        canvas.toBlob((b) => resolve(b), 'image/webp', q);
       });
+    };
+
+    blob = await getBlob(quality);
+    // Se já for menor que 1MB, não reduz qualidade
+    if (blob && blob.size <= targetSize) {
+      return blob;
     }
-    scaleDown -= 0.1;
-  }
-  return blob;
-};
 
-const compressImageToBlob = async (
-  canvas: HTMLCanvasElement,
-  targetSize: number = 1024 * 1024
-): Promise<Blob | null> => {
-  let blob = await reduceQuality(canvas, targetSize);
-  if (blob && blob.size > targetSize) {
-    blob = await scaleResolution(canvas, targetSize);
-  }
-  return blob;
-};
-
-interface CropCoords {
-  sourceX: number;
-  sourceY: number;
-  sourceWidth: number;
-  sourceHeight: number;
-}
-
-function limitCoord(val: number, maxVal: number): number {
-  if (!isFinite(val)) return 0;
-  return Math.max(0, Math.min(val, maxVal - 1));
-}
-
-function limitDim(val: number, maxVal: number, offset: number): number {
-  if (!isFinite(val) || val <= 0) return maxVal - offset;
-  return Math.min(val, maxVal - offset);
-}
-
-const getCropCoords = (
-  naturalWidth: number,
-  naturalHeight: number,
-  zoom: number,
-  positionX: number,
-  positionY: number,
-  viewportWidth: number,
-  viewportHeight: number
-): CropCoords => {
-  const safeWidth = naturalWidth || 1;
-  const safeHeight = naturalHeight || 1;
-  const safeZoom = zoom || 1;
-
-  const smin = Math.max(viewportWidth / safeWidth, viewportHeight / safeHeight);
-  const scale = (smin * safeZoom) || 1;
-
-  const sourceX = limitCoord(-positionX / scale, safeWidth);
-  const sourceY = limitCoord(-positionY / scale, safeHeight);
-  const sourceWidth = limitDim(viewportWidth / scale, safeWidth, sourceX);
-  const sourceHeight = limitDim(viewportHeight / scale, safeHeight, sourceY);
-
-  return {
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
+    while (blob && blob.size > targetSize && quality > 0.3) {
+      quality -= 0.1;
+      blob = await getBlob(quality);
+    }
+    return blob;
   };
-};
+
+  const scaleResolution = async (
+    canvas: HTMLCanvasElement,
+    targetSize: number
+  ): Promise<Blob | null> => {
+    let blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), 'image/webp', 0.8);
+    });
+    if (!blob || blob.size <= targetSize) return blob;
+
+    let scaleDown = 0.8;
+    while (blob && blob.size > targetSize && scaleDown > 0.2) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = Math.round(canvas.width * scaleDown);
+      tempCanvas.height = Math.round(canvas.height * scaleDown);
+      const tempCtx = tempCanvas.getContext('2d');
+      if (tempCtx) {
+        tempCtx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height);
+        blob = await new Promise<Blob | null>((resolve) => {
+          tempCanvas.toBlob((b) => resolve(b), 'image/webp', 0.8);
+        });
+      }
+      scaleDown -= 0.1;
+    }
+    return blob;
+  };
+
+  const compressImageToBlob = async (
+    canvas: HTMLCanvasElement,
+    targetSize: number = 1024 * 1024
+  ): Promise<Blob | null> => {
+    let blob = await reduceQuality(canvas, targetSize);
+    if (blob && blob.size > targetSize) {
+      blob = await scaleResolution(canvas, targetSize);
+    }
+    return blob;
+  };
+
+  interface CropCoords {
+    sourceX: number;
+    sourceY: number;
+    sourceWidth: number;
+    sourceHeight: number;
+  }
+
+  function limitCoord(val: number, maxVal: number): number {
+    if (!isFinite(val)) return 0;
+    return Math.max(0, Math.min(val, maxVal - 1));
+  }
+
+  function limitDim(val: number, maxVal: number, offset: number): number {
+    if (!isFinite(val) || val <= 0) return maxVal - offset;
+    return Math.min(val, maxVal - offset);
+  }
+
+  const getCropCoords = (
+    naturalWidth: number,
+    naturalHeight: number,
+    zoom: number,
+    positionX: number,
+    positionY: number,
+    viewportWidth: number,
+    viewportHeight: number
+  ): CropCoords => {
+    const safeWidth = naturalWidth || 1;
+    const safeHeight = naturalHeight || 1;
+    const safeZoom = zoom || 1;
+
+    const smin = Math.min(viewportWidth / safeWidth, viewportHeight / safeHeight);
+    const scale = (smin * safeZoom) || 1;
+
+    const sourceX = limitCoord(-positionX / scale, safeWidth);
+    const sourceY = limitCoord(-positionY / scale, safeHeight);
+    const sourceWidth = limitDim(viewportWidth / scale, safeWidth, sourceX);
+    const sourceHeight = limitDim(viewportHeight / scale, safeHeight, sourceY);
+
+    return {
+      sourceX,
+      sourceY,
+      sourceWidth,
+      sourceHeight,
+    };
+  };
 
   const handleCropSave = async () => {
     if (!imgRef.current || processing) return;
@@ -315,7 +315,7 @@ const getCropCoords = (
         <h3 className="modal-title" style={{ width: '100%', textAlign: 'center', margin: 0 }}>
           Recortar Imagem (Proporção {aspectRatio})
         </h3>
-        
+
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '-8px' }}>
           Arraste a imagem para mover e use a barra de zoom para ajustar. O arquivo final será reduzido para menos de 1MB.
         </p>
@@ -332,6 +332,8 @@ const getCropCoords = (
             border: '2px solid var(--primary)',
             boxShadow: 'var(--shadow-lg)',
             cursor: 'move',
+            boxSizing: 'content-box',
+            flexShrink: 0,
           }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
@@ -356,6 +358,9 @@ const getCropCoords = (
                 pointerEvents: 'none',
                 maxWidth: 'none',
                 maxHeight: 'none',
+                border: 'none',
+                padding: 0,
+                margin: 0,
               }}
             />
           )}

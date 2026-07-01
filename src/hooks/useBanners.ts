@@ -71,6 +71,16 @@ export function useBanners() {
     }
   };
 
+  const deleteBannerRaw = async (id: string) => {
+    try {
+      await bannersService.deleteBanner(id);
+      setBanners((prev) => prev.filter((b) => b.id !== id));
+      success('Banner excluído com sucesso!');
+    } catch (err: any) {
+      error('Falha ao deletar banner: ' + err.message);
+    }
+  };
+
   return {
     banners,
     loading,
@@ -86,6 +96,7 @@ export function useBanners() {
     createBanner,
     updateBanner,
     deleteBanner,
+    deleteBannerRaw,
     refetch: fetchBanners,
   };
 }

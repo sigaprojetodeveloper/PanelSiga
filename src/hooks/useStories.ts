@@ -96,6 +96,19 @@ export function useStories() {
     }
   };
 
+  const deleteChannelRaw = async (id: string) => {
+    try {
+      await storiesService.deleteStoryChannel(id);
+      if (selectedChannelId === id) {
+        setSelectedChannelId(undefined);
+      }
+      await fetchChannelsAndItems();
+      success('Canal deletado com sucesso!');
+    } catch (err: any) {
+      error('Falha ao deletar canal: ' + err.message);
+    }
+  };
+
   const createItem = async (item: Omit<StoryItem, 'id' | 'created_at'>) => {
     try {
       const newItem = await storiesService.createStoryItem(item);
@@ -119,6 +132,16 @@ export function useStories() {
 
   const deleteItem = async (id: string) => {
     if (!confirm('Deseja realmente excluir este story?')) return;
+    try {
+      await storiesService.deleteStoryItem(id);
+      await fetchChannelsAndItems();
+      success('Story excluído com sucesso!');
+    } catch (err: any) {
+      error('Falha ao deletar story: ' + err.message);
+    }
+  };
+
+  const deleteItemRaw = async (id: string) => {
     try {
       await storiesService.deleteStoryItem(id);
       await fetchChannelsAndItems();
@@ -154,9 +177,11 @@ export function useStories() {
     createChannel,
     updateChannel,
     deleteChannel,
+    deleteChannelRaw,
     createItem,
     updateItemStatus,
     deleteItem,
+    deleteItemRaw,
     refetch: fetchChannelsAndItems,
   };
 }
