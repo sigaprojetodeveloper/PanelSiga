@@ -532,6 +532,9 @@ function ChannelRow({
         <div>
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
             <span style={{ fontWeight: 600, fontSize: '14px', color: isSelected ? 'var(--primary)' : 'inherit' }}>{ch.name || 'Sem nome'}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px' }}>
+            <MapPin size={10} style={{ color: 'var(--text-muted)' }} />
             <span
               style={{
                 fontSize: '9px',
