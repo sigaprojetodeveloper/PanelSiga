@@ -998,6 +998,31 @@ h1, h2, h3, h4, h5, h6 {
   .channel-selected-actions .btn-new-channel {
     display: none !important;
   }
+
+  /* FAB styling for Stories action buttons on mobile */
+  .btn-new-channel, .btn-new-story {
+    position: fixed !important;
+    bottom: 24px !important;
+    right: 24px !important;
+    width: 56px !important;
+    height: 56px !important;
+    border-radius: 50% !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 1000 !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+  }
+  
+  .btn-new-channel .btn-text, .btn-new-story .btn-text {
+    display: none !important;
+  }
+
+  .btn-new-channel svg, .btn-new-story svg {
+    width: 24px !important;
+    height: 24px !important;
+  }
 }
 
 

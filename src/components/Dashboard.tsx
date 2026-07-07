@@ -2141,7 +2141,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       setAddChannelModalOpen(true);
                     }}
                   >
-                    <Plus size={16} /> Novo Canal
+                    <Plus size={16} /> <span className="btn-text">Novo Canal</span>
                   </button>
                   <button
                     className="btn btn-primary btn-new-story"
@@ -2149,7 +2149,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     disabled={!storyHook.selectedChannelId}
                     title={!storyHook.selectedChannelId ? "Selecione um canal antes de criar um story" : ""}
                   >
-                    <Plus size={16} /> Novo Story Item
+                    <Plus size={16} /> <span className="btn-text">Novo Story Item</span>
                   </button>
                 </div>
               </div>
