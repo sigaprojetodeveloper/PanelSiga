@@ -532,34 +532,29 @@ function ChannelRow({
         <div>
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
             <span style={{ fontWeight: 600, fontSize: '14px', color: isSelected ? 'var(--primary)' : 'inherit' }}>{ch.name || 'Sem nome'}</span>
-            {ch.state ? (
-              <span
-                style={{
-                  fontSize: '9px',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                  color: 'var(--primary)',
-                  fontWeight: 600
-                }}
-              >
-                {ch.city ? `${ch.city}/${ch.state}` : ch.state}
-              </span>
-            ) : (
-              <span
-                style={{
-                  fontSize: '9px',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  backgroundColor: 'var(--bg-app)',
-                  color: 'var(--text-muted)',
-                  border: '1px solid var(--border-light)',
-                  fontWeight: 600
-                }}
-              >
-                Nacional
-              </span>
-            )}
+            <span
+              style={{
+                fontSize: '9px',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                backgroundColor: ch.scope === 'global' ? 'rgba(107, 114, 128, 0.1)' : 
+                               ch.scope === 'national' ? 'rgba(59, 130, 246, 0.1)' : 
+                               ch.scope === 'state' ? 'rgba(245, 158, 11, 0.1)' : 
+                               ch.scope === 'city' ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-app)',
+                color: ch.scope === 'global' ? '#6b7280' : 
+                       ch.scope === 'national' ? 'var(--primary)' : 
+                       ch.scope === 'state' ? '#d97706' : 
+                       ch.scope === 'city' ? 'var(--danger)' : 'var(--text-muted)',
+                fontWeight: 600,
+                border: ch.scope === 'global' || !ch.scope ? '1px solid var(--border-light)' : 'none'
+              }}
+            >
+              {ch.scope === 'global' && 'Global'}
+              {ch.scope === 'national' && 'Nacional'}
+              {ch.scope === 'state' && `Estadual (${ch.state || ''})`}
+              {ch.scope === 'city' && `Municipal (${ch.city || ''}/${ch.state || ''})`}
+              {!ch.scope && (ch.state ? (ch.city ? `${ch.city}/${ch.state}` : ch.state) : 'Nacional')}
+            </span>
           </div>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
             Ativos: <strong style={{ color: activeCount > 0 ? 'var(--success)' : 'inherit' }}>{activeCount}</strong>
