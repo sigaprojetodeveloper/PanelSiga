@@ -444,6 +444,9 @@ function HistoricalBannerCard({
         )}
         <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <MapPin size={10} /> Abrangência: {banner.scope === 'global' ? 'Global' : banner.scope === 'national' ? `Nacional (${banner.country || 'Brasil'})` : banner.scope === 'state' ? `Estadual (${banner.state || ''})` : banner.scope === 'city' ? `Municipal (${banner.city || ''}/${banner.state || ''})` : banner.scope || 'Global'}
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <Calendar size={10} /> Início: {new Date(banner.initialization_date).toLocaleDateString()}
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -2523,6 +2526,9 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                 )}
                                 <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <MapPin size={10} /> Abrangência: {banner.scope === 'global' ? 'Global' : banner.scope === 'national' ? `Nacional (${banner.country || 'Brasil'})` : banner.scope === 'state' ? `Estadual (${banner.state || ''})` : banner.scope === 'city' ? `Municipal (${banner.city || ''}/${banner.state || ''})` : banner.scope || 'Global'}
+                                  </span>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <Calendar size={10} /> Início: {new Date(banner.initialization_date).toLocaleDateString()}
                                   </span>
                                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -2612,6 +2618,9 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                     </div>
                                   )}
                                   <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <MapPin size={10} /> Abrangência: {banner.scope === 'global' ? 'Global' : banner.scope === 'national' ? `Nacional (${banner.country || 'Brasil'})` : banner.scope === 'state' ? `Estadual (${banner.state || ''})` : banner.scope === 'city' ? `Municipal (${banner.city || ''}/${banner.state || ''})` : banner.scope || 'Global'}
+                                    </span>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                       <Calendar size={10} /> Início: {new Date(banner.initialization_date).toLocaleDateString()}
                                     </span>
