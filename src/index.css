@@ -999,6 +999,11 @@ h1, h2, h3, h4, h5, h6 {
     display: none !important;
   }
 
+  /* Hide New Story button when NO channel is selected to avoid overlapping FABs */
+  .stories-header-actions:not(.channel-selected-actions) .btn-new-story {
+    display: none !important;
+  }
+
   /* FAB styling for Stories action buttons on mobile */
   .btn-new-channel, .btn-new-story {
     position: fixed !important;
