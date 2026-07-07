@@ -99,6 +99,10 @@ const parseLinkUrl = (url: string | null): ParsedLink => {
     const userId = url.split('=')[1] || '';
     return { type: 'internal', rawValue: userId, customRoute: '' };
   }
+  if (url.startsWith('/works/')) {
+    const workId = url.split('/works/')[1] || '';
+    return { type: 'internal', rawValue: 'work', customRoute: workId };
+  }
   if (url.startsWith('/')) {
     return { type: 'internal', rawValue: 'custom', customRoute: url };
   }
@@ -119,6 +123,9 @@ const assembleLinkUrl = (
     return rawValue;
   }
   if (type === 'internal') {
+    if (rawValue === 'work') {
+      return `/works/${customRoute}`;
+    }
     if (rawValue === 'custom') {
       return customRoute;
     }
@@ -721,6 +728,182 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     }
     loadLinkUsers();
   }, []);
+
+  // States for Work Selection popup
+  const [workSearchModalOpen, setWorkSearchModalOpen] = useState(false);
+  const [workSearchQuery, setWorkSearchQuery] = useState('');
+  const [worksList, setWorksList] = useState<any[]>([]);
+  const [loadingWorks, setLoadingWorks] = useState(false);
+  const [onWorkSelectCallback, setOnWorkSelectCallback] = useState<((workId: string, workTitle: string) => void) | null>(null);
+  const [resolvedWorksMap, setResolvedWorksMap] = useState<Record<string, string>>({});
+  const fetchedWorkIdsRef = React.useRef<Set<string>>(new Set());
+
+  // States for Profile Selection popup
+  const [profileSearchModalOpen, setProfileSearchModalOpen] = useState(false);
+  const [profileSearchQuery, setProfileSearchQuery] = useState('');
+  const [profilesList, setProfilesList] = useState<any[]>([]);
+  const [loadingProfiles, setLoadingProfiles] = useState(false);
+  const [onProfileSelectCallback, setOnProfileSelectCallback] = useState<((profileId: string, profileName: string) => void) | null>(null);
+  const [resolvedProfilesMap, setResolvedProfilesMap] = useState<Record<string, string>>({});
+  const fetchedProfileIdsRef = React.useRef<Set<string>>(new Set());
+
+  // Load works list for popup search
+  const loadWorksForSearch = async (queryText: string) => {
+    setLoadingWorks(true);
+    try {
+      let q = supabase
+        .from('works')
+        .select('id, title, city, state, status')
+        .in('status', ['available', 'in_progress'])
+        .order('created_at', { ascending: false });
+
+      if (queryText.trim()) {
+        q = q.ilike('title', `%${queryText}%`);
+      }
+
+      const { data, error: err } = await q.limit(20);
+      if (err) throw err;
+      setWorksList(data || []);
+      
+      // Update cache map with retrieved works
+      if (data) {
+        setResolvedWorksMap(prev => {
+          const newMap = { ...prev };
+          data.forEach((w: any) => {
+            newMap[w.id] = w.title;
+          });
+          return newMap;
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao buscar obras:', err);
+    } finally {
+      setLoadingWorks(false);
+    }
+  };
+
+  // Trigger search when query or modal state changes
+  useEffect(() => {
+    if (workSearchModalOpen) {
+      loadWorksForSearch(workSearchQuery);
+    }
+  }, [workSearchQuery, workSearchModalOpen]);
+
+  // Fetch title of specific works if they are not in cache but selected in the form
+  useEffect(() => {
+    const fetchSingleWorkTitle = async (workId: string) => {
+      if (!workId || fetchedWorkIdsRef.current.has(workId)) return;
+      fetchedWorkIdsRef.current.add(workId);
+      try {
+        const { data, error: err } = await supabase
+          .from('works')
+          .select('title')
+          .eq('id', workId)
+          .single();
+        if (!err && data) {
+          setResolvedWorksMap(prev => ({
+            ...prev,
+            [workId]: (data as any).title
+          }));
+        } else {
+          setResolvedWorksMap(prev => ({
+            ...prev,
+            [workId]: 'Obra não encontrada'
+          }));
+        }
+      } catch (err) {
+        console.error('Erro ao carregar título de obra:', err);
+      }
+    };
+
+    if (bannerLinkType === 'internal' && bannerLinkRawValue === 'work' && bannerLinkCustomRoute) {
+      fetchSingleWorkTitle(bannerLinkCustomRoute);
+    }
+    if (newStoryLinkType === 'internal' && newStoryLinkRawValue === 'work' && newStoryLinkCustomRoute) {
+      fetchSingleWorkTitle(newStoryLinkCustomRoute);
+    }
+  }, [bannerLinkType, bannerLinkRawValue, bannerLinkCustomRoute, newStoryLinkType, newStoryLinkRawValue, newStoryLinkCustomRoute]);
+
+  // Load profiles list for popup search
+  const loadProfilesForSearch = async (queryText: string) => {
+    setLoadingProfiles(true);
+    try {
+      let q = supabase
+        .from('users')
+        .select('id, name, email, phone')
+        .order('name', { ascending: true });
+
+      if (queryText.trim()) {
+        q = q.ilike('name', `%${queryText}%`);
+      }
+
+      const { data, error: err } = await q.limit(20);
+      if (err) throw err;
+      setProfilesList(data || []);
+      
+      // Update cache map with retrieved profiles
+      if (data) {
+        setResolvedProfilesMap(prev => {
+          const newMap = { ...prev };
+          data.forEach((p: any) => {
+            newMap[p.id] = p.name || 'Sem nome';
+          });
+          return newMap;
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao buscar perfis:', err);
+    } finally {
+      setLoadingProfiles(false);
+    }
+  };
+
+  // Trigger profile search when query or modal state changes
+  useEffect(() => {
+    if (profileSearchModalOpen) {
+      loadProfilesForSearch(profileSearchQuery);
+    }
+  }, [profileSearchQuery, profileSearchModalOpen]);
+
+  // Fetch name of specific profiles if they are not in cache but selected in the form
+  useEffect(() => {
+    const fetchSingleProfileName = async (profileId: string) => {
+      if (!profileId || fetchedProfileIdsRef.current.has(profileId)) return;
+      fetchedProfileIdsRef.current.add(profileId);
+      try {
+        const { data, error: err } = await supabase
+          .from('users')
+          .select('name')
+          .eq('id', profileId)
+          .single();
+        if (!err && data) {
+          setResolvedProfilesMap(prev => ({
+            ...prev,
+            [profileId]: (data as any).name || 'Sem nome'
+          }));
+        } else {
+          setResolvedProfilesMap(prev => ({
+            ...prev,
+            [profileId]: 'Perfil não encontrado'
+          }));
+        }
+      } catch (err) {
+        console.error('Erro ao carregar nome do perfil:', err);
+      }
+    };
+
+    const isProfileLink = (type: string, rawVal: string) => {
+      return type === 'internal' && rawVal !== 'work' && rawVal !== 'custom' && rawVal !== '';
+    };
+
+    if (isProfileLink(bannerLinkType, bannerLinkRawValue)) {
+      fetchSingleProfileName(bannerLinkRawValue);
+    }
+    if (isProfileLink(newStoryLinkType, newStoryLinkRawValue)) {
+      fetchSingleProfileName(newStoryLinkRawValue);
+    }
+  }, [bannerLinkType, bannerLinkRawValue, newStoryLinkType, newStoryLinkRawValue]);
+
 
   // Selected report detail state
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
@@ -1371,11 +1554,11 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               <label>Tipo de Link Interno</label>
               <select
                 className="select-field"
-                value={rawValue === 'custom' ? 'custom' : 'profile'}
+                value={rawValue === 'work' ? 'work' : 'profile'}
                 onChange={(e) => {
-                  if (e.target.value === 'custom') {
-                    setRawValue('custom');
-                    setCustomRoute('/');
+                  if (e.target.value === 'work') {
+                    setRawValue('work');
+                    setCustomRoute('');
                   } else {
                     setRawValue('');
                     setCustomRoute('');
@@ -1383,38 +1566,53 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 }}
               >
                 <option value="profile">Perfil de Profissional/Cliente</option>
-                <option value="custom">Rota Personalizada do App</option>
+                <option value="work">Obra</option>
               </select>
             </div>
 
-            {rawValue === 'custom' ? (
+            {rawValue === 'work' ? (
               <div className="form-group">
-                <label>Rota do App (ID ou Caminho)</label>
+                <label>Selecione a Obra</label>
                 <input
                   type="text"
                   className="input-field"
-                  value={customRoute}
-                  onChange={(e) => setCustomRoute(e.target.value)}
-                  placeholder="Ex: /search?tab=professionals"
+                  style={{ cursor: 'pointer' }}
+                  value={resolvedWorksMap[customRoute] || ''}
+                  placeholder="Clique para selecionar uma obra..."
+                  readOnly
+                  onClick={() => {
+                    setOnWorkSelectCallback(() => (workId: string, workTitle: string) => {
+                      setCustomRoute(workId);
+                      setResolvedWorksMap(prev => ({ ...prev, [workId]: workTitle }));
+                      setWorkSearchModalOpen(false);
+                    });
+                    setWorkSearchQuery('');
+                    setWorkSearchModalOpen(true);
+                  }}
                   required
                 />
               </div>
             ) : (
               <div className="form-group">
                 <label>Selecionar Perfil Destino</label>
-                <select
-                  className="select-field"
-                  value={rawValue}
-                  onChange={(e) => setRawValue(e.target.value)}
+                <input
+                  type="text"
+                  className="input-field"
+                  style={{ cursor: 'pointer' }}
+                  value={resolvedProfilesMap[rawValue] || ''}
+                  placeholder="Clique para selecionar um perfil..."
+                  readOnly
+                  onClick={() => {
+                    setOnProfileSelectCallback(() => (profileId: string, profileName: string) => {
+                      setRawValue(profileId);
+                      setResolvedProfilesMap(prev => ({ ...prev, [profileId]: profileName }));
+                      setProfileSearchModalOpen(false);
+                    });
+                    setProfileSearchQuery('');
+                    setProfileSearchModalOpen(true);
+                  }}
                   required
-                >
-                  <option value="">Selecione um perfil</option>
-                  {linkUsersList.map((usr) => (
-                    <option key={usr.id} value={usr.id}>
-                      {usr.name || 'Sem nome'} ({usr.id.slice(0, 8)}...)
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             )}
           </div>
@@ -3481,6 +3679,122 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               >
                 Confirmar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ================= MODAL: WORK SEARCH/SELECT ================= */}
+      {workSearchModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => setWorkSearchModalOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setWorkSearchModalOpen(false)}>
+              <X size={20} />
+            </button>
+            <h3 className="modal-title">Selecione a Obra</h3>
+            
+            <div style={{ margin: '16px 0' }}>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="Pesquisar por título da obra..."
+                value={workSearchQuery}
+                onChange={(e) => setWorkSearchQuery(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {loadingWorks ? (
+                <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px' }}>Carregando obras...</p>
+              ) : worksList.length === 0 ? (
+                <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px' }}>Nenhuma obra ativa encontrada.</p>
+              ) : (
+                worksList.map((work) => (
+                  <div
+                    key={work.id}
+                    onClick={() => {
+                      if (onWorkSelectCallback) {
+                        onWorkSelectCallback(work.id, work.title);
+                      }
+                    }}
+                    style={{
+                      padding: '12px',
+                      backgroundColor: 'var(--bg-app)',
+                      borderRadius: 'var(--radius-sm)',
+                      cursor: 'pointer',
+                      border: '1px solid var(--border-light)',
+                      transition: 'background-color 0.2s',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--border-light)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-app)'; }}
+                  >
+                    <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{work.title}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>📍 {work.city || 'Desconhecida'}/{work.state || ''}</span>
+                      <span style={{ textTransform: 'uppercase', fontWeight: 600, color: 'var(--primary)' }}>
+                        {work.status === 'aberta' || work.status === 'available' ? 'Aberta' : 'Em andamento'}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ================= MODAL: PROFILE SEARCH/SELECT ================= */}
+      {profileSearchModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => setProfileSearchModalOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setProfileSearchModalOpen(false)}>
+              <X size={20} />
+            </button>
+            <h3 className="modal-title">Selecione o Perfil</h3>
+            
+            <div style={{ margin: '16px 0' }}>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="Pesquisar por nome do perfil..."
+                value={profileSearchQuery}
+                onChange={(e) => setProfileSearchQuery(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {loadingProfiles ? (
+                <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px' }}>Carregando perfis...</p>
+              ) : profilesList.length === 0 ? (
+                <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px' }}>Nenhum perfil encontrado.</p>
+              ) : (
+                profilesList.map((profile) => (
+                  <div
+                    key={profile.id}
+                    onClick={() => {
+                      if (onProfileSelectCallback) {
+                        onProfileSelectCallback(profile.id, profile.name || 'Sem nome');
+                      }
+                    }}
+                    style={{
+                      padding: '12px',
+                      backgroundColor: 'var(--bg-app)',
+                      borderRadius: 'var(--radius-sm)',
+                      cursor: 'pointer',
+                      border: '1px solid var(--border-light)',
+                      transition: 'background-color 0.2s',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--border-light)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-app)'; }}
+                  >
+                    <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{profile.name || 'Sem nome'}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>✉️ {profile.email || 'Sem e-mail'}</span>
+                      <span>ID: {profile.id.slice(0, 8)}...</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
