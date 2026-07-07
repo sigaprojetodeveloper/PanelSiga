@@ -817,5 +817,188 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* ================= RESPONSIVE LAYOUT & MOBILE OPTIMIZATIONS ================= */
+
+/* Hide mobile toggle buttons by default on desktop */
+.btn-menu-mobile, .btn-close-sidebar {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  cursor: pointer;
+  padding: 8px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: var(--transition-smooth);
+}
+
+.btn-menu-mobile:hover, .btn-close-sidebar:hover {
+  background-color: var(--secondary);
+}
+
+/* Sidebar Overlay */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 1100;
+  animation: fadeIn 0.25s ease-out;
+}
+
+@media (max-width: 1024px) {
+  /* Turn sidebar into dynamic mobile drawer */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -260px;
+    height: 100vh;
+    z-index: 1200;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .sidebar.open {
+    left: 0;
+  }
+
+  .btn-menu-mobile, .btn-close-sidebar {
+    display: inline-flex;
+  }
+
+  .sidebar-brand {
+    justify-content: space-between;
+  }
+
+  .header-main {
+    padding: 16px 20px;
+    gap: 16px;
+  }
+
+  .content-body {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Layout adjustments */
+  .grid-2, .modal-grid-2 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .filters-bar {
+    padding: 16px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .filters-group {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .filter-control, .search-input-wrapper {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .search-input-wrapper input {
+    width: 100%;
+  }
+
+  /* Modal Mobile Optimization */
+  .modal-content {
+    width: 95vw;
+    max-height: 90vh;
+    padding: 20px 16px;
+  }
+
+  .modal-close {
+    top: 16px;
+    right: 16px;
+  }
+
+  .modal-title {
+    font-size: 18px;
+    margin-bottom: 16px;
+  }
+
+  .modal-grid-2 {
+    gap: 12px;
+  }
+
+  /* Stats Grid */
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card {
+    padding: 16px;
+  }
+
+  .stat-value {
+    font-size: 26px;
+  }
+
+  /* Tables horizontal scrolling notice and alignment */
+  .admin-table th, .admin-table td {
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+}
+
+/* ================= STORIES MOBILE DRILL-DOWN LAYOUT ================= */
+.stories-split-container {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: 24px;
+}
+
+.mobile-only-back-btn {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .mobile-only-back-btn {
+    display: inline-flex !important;
+  }
+
+  .stories-split-container {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  /* Drill-down mechanics: toggling visibility based on channel selection */
+  .stories-split-container.channel-selected .stories-channels-pane {
+    display: none !important;
+  }
+
+  .stories-split-container:not(.channel-selected) .stories-items-pane {
+    display: none !important;
+  }
+
+  /* Actions header adjustments */
+  .stories-header-actions {
+    width: 100%;
+  }
+
+  .stories-header-actions .btn {
+    flex: 1;
+  }
+
+  /* Hide New Channel button when a channel is selected to avoid UI crowding */
+  .channel-selected-actions .btn-new-channel {
+    display: none !important;
+  }
+}
+
 
 

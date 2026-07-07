@@ -32,7 +32,8 @@ import {
   Image as ImageIcon,
   UploadCloud,
   Edit2,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Menu
 } from 'lucide-react';
 
 const getTodayStr = () => {
@@ -621,6 +622,7 @@ interface DashboardProps {
 export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const { success, error, warning, info } = useToast();
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'stories' | 'reports' | 'settings' | 'banners'>('overview');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Custom Hooks
   const userHook = useUsers();
@@ -1623,44 +1625,68 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
   return (
     <div className="dashboard-layout">
+      {/* Sidebar Overlay */}
+      {mobileSidebarOpen && (
+        <div className="sidebar-overlay" onClick={() => setMobileSidebarOpen(false)} />
+      )}
+
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${mobileSidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-brand">
           <img src={logoImg.src} alt="Logo Siga" style={{ height: '56px', objectFit: 'contain' }} />
           <h2>Painel Siga</h2>
+          {/* Close button inside sidebar on mobile */}
+          <button className="btn-close-sidebar" onClick={() => setMobileSidebarOpen(false)}>
+            <X size={24} />
+          </button>
         </div>
 
         <nav className="sidebar-nav">
           <a
-            onClick={() => setActiveTab('overview')}
+            onClick={() => {
+              setActiveTab('overview');
+              setMobileSidebarOpen(false);
+            }}
             className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`}
           >
             <LayoutDashboard size={18} />
             Visão Geral
           </a>
           <a
-            onClick={() => setActiveTab('users')}
+            onClick={() => {
+              setActiveTab('users');
+              setMobileSidebarOpen(false);
+            }}
             className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
           >
             <Users size={18} />
             Usuários
           </a>
           <a
-            onClick={() => setActiveTab('stories')}
+            onClick={() => {
+              setActiveTab('stories');
+              setMobileSidebarOpen(false);
+            }}
             className={`nav-item ${activeTab === 'stories' ? 'active' : ''}`}
           >
             <Film size={18} />
             Stories
           </a>
           <a
-            onClick={() => setActiveTab('banners')}
+            onClick={() => {
+              setActiveTab('banners');
+              setMobileSidebarOpen(false);
+            }}
             className={`nav-item ${activeTab === 'banners' ? 'active' : ''}`}
           >
             <ImageIcon size={18} />
             Banners
           </a>
           <a
-            onClick={() => setActiveTab('reports')}
+            onClick={() => {
+              setActiveTab('reports');
+              setMobileSidebarOpen(false);
+            }}
             className={`nav-item ${activeTab === 'reports' ? 'active' : ''}`}
           >
             <AlertTriangle size={18} />
@@ -1672,7 +1698,10 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
             )}
           </a>
           <a
-            onClick={() => setActiveTab('settings')}
+            onClick={() => {
+              setActiveTab('settings');
+              setMobileSidebarOpen(false);
+            }}
             className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
           >
             <Settings size={18} />
@@ -1694,6 +1723,9 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       {/* Main Panel Content */}
       <main className="main-content">
         <header className="header-main">
+          <button className="btn-menu-mobile" onClick={() => setMobileSidebarOpen(true)}>
+            <Menu size={24} />
+          </button>
           <div className="header-title">
             <h2>
               {activeTab === 'overview' && 'Visão Geral'}
@@ -2096,9 +2128,9 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '12px' }}>
+                <div className={`stories-header-actions ${storyHook.selectedChannelId ? 'channel-selected-actions' : ''}`} style={{ display: 'flex', gap: '12px' }}>
                   <button
-                    className="btn btn-secondary"
+                    className="btn btn-secondary btn-new-channel"
                     onClick={() => {
                       setNewChannelName('');
                       setNewChannelAvatar('');
@@ -2112,7 +2144,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     <Plus size={16} /> Novo Canal
                   </button>
                   <button
-                    className="btn btn-primary"
+                    className="btn btn-primary btn-new-story"
                     onClick={handleOpenAddStory}
                     disabled={!storyHook.selectedChannelId}
                     title={!storyHook.selectedChannelId ? "Selecione um canal antes de criar um story" : ""}
@@ -2123,9 +2155,9 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               </div>
 
               {/* Split screen: channels on left, stories on right */}
-              <div style={{ display: 'grid', gridTemplateColumns: '0.85fr 1.15fr', gap: '24px' }}>
+              <div className={`stories-split-container ${storyHook.selectedChannelId ? 'channel-selected' : ''}`}>
                 {/* Channels List */}
-                <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column' }}>
+                <div className="stories-channels-pane" style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column' }}>
                   <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Canais de Stories</h3>
                   {storyHook.channels.length === 0 ? (
                     <p style={{ color: 'var(--text-muted)' }}>Nenhum canal criado.</p>
@@ -2213,8 +2245,17 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 </div>
 
                 {/* Story Items Grid */}
-                <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
+                <div className="stories-items-pane" style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
                   <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Stories Publicados</h3>
+                  {storyHook.selectedChannelId && (
+                    <button
+                      className="btn btn-secondary mobile-only-back-btn"
+                      onClick={() => storyHook.setSelectedChannelId(undefined)}
+                      style={{ marginBottom: '16px', width: '100%' }}
+                    >
+                      ← Voltar para Canais
+                    </button>
+                  )}
                   {!storyHook.selectedChannelId ? (
                     <p style={{ color: 'var(--text-muted)' }}>Selecione um canal na lista para visualizar seus stories.</p>
                   ) : storyHook.items.length === 0 ? (
