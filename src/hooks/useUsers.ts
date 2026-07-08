@@ -58,16 +58,16 @@ export function useUsers() {
     }
   };
 
-  const updateUserStatus = async (userId: string, status: User['status']) => {
+  const updateUserStatus = async (userId: string, status: User['status'], blockReason?: string | null) => {
     try {
-      await usersService.updateUserStatus(userId, status);
+      await usersService.updateUserStatus(userId, status, blockReason);
       // update local list
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, status } : u))
+        prev.map((u) => (u.id === userId ? { ...u, status, block_reason: status === 'blocked' ? blockReason : null } : u))
       );
       // update detail if currently viewed
       if (selectedUser && selectedUser.id === userId) {
-        setSelectedUser((prev: any) => prev ? { ...prev, status } : null);
+        setSelectedUser((prev: any) => prev ? { ...prev, status, block_reason: status === 'blocked' ? blockReason : null } : null);
       }
       success('Status do usuário atualizado!');
     } catch (err: any) {

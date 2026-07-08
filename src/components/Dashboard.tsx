@@ -9,6 +9,7 @@ import { useBanners } from '../hooks/useBanners';
 import { uploadToR2 } from '../services/storageService';
 import { supabase } from '../lib/supabase';
 import { storiesService } from '../services/storiesService';
+import { notificationsService } from '../services/notificationsService';
 import { useToast } from '../hooks/useToast';
 import { Country, State, City } from 'country-state-city';
 import logoImg from '../assets/logo.png';
@@ -33,7 +34,15 @@ import {
   UploadCloud,
   Edit2,
   Link as LinkIcon,
-  Menu
+  Menu,
+  Bell,
+  Star,
+  Mail,
+  Globe,
+  Send,
+  MessageSquare,
+  Phone,
+  Award
 } from 'lucide-react';
 
 const getTodayStr = () => {
@@ -42,6 +51,43 @@ const getTodayStr = () => {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+const decodeBase64 = (str: string): string => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let decoded = '';
+  let buffer = 0;
+  let bits = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    if (char === '=') break;
+    const value = chars.indexOf(char);
+    if (value === -1) continue;
+    buffer = (buffer << 6) | value;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      decoded += String.fromCharCode((buffer >> bits) & 0xff);
+    }
+  }
+  return decoded;
+};
+
+const decodeDocumentHash = (docHash: string | null | undefined): string => {
+  if (!docHash) return '';
+  const parts = docHash.split(':');
+  if (parts.length < 3) return '';
+  try {
+    const unmasked = decodeBase64(parts[2]);
+    if (unmasked.length === 11) {
+      return unmasked.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    } else if (unmasked.length === 14) {
+      return unmasked.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+    }
+    return unmasked;
+  } catch {
+    return '';
+  }
 };
 
 const ESTADOS_BRASIL = [
@@ -540,14 +586,14 @@ function ChannelRow({
                 fontSize: '9px',
                 padding: '2px 6px',
                 borderRadius: '4px',
-                backgroundColor: ch.scope === 'global' ? 'rgba(107, 114, 128, 0.1)' : 
-                               ch.scope === 'national' ? 'rgba(59, 130, 246, 0.1)' : 
-                               ch.scope === 'state' ? 'rgba(245, 158, 11, 0.1)' : 
-                               ch.scope === 'city' ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-app)',
-                color: ch.scope === 'global' ? '#6b7280' : 
-                       ch.scope === 'national' ? 'var(--primary)' : 
-                       ch.scope === 'state' ? '#d97706' : 
-                       ch.scope === 'city' ? 'var(--danger)' : 'var(--text-muted)',
+                backgroundColor: ch.scope === 'global' ? 'rgba(107, 114, 128, 0.1)' :
+                  ch.scope === 'national' ? 'rgba(59, 130, 246, 0.1)' :
+                    ch.scope === 'state' ? 'rgba(245, 158, 11, 0.1)' :
+                      ch.scope === 'city' ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-app)',
+                color: ch.scope === 'global' ? '#6b7280' :
+                  ch.scope === 'national' ? 'var(--primary)' :
+                    ch.scope === 'state' ? '#d97706' :
+                      ch.scope === 'city' ? 'var(--danger)' : 'var(--text-muted)',
                 fontWeight: 600,
                 border: ch.scope === 'global' || !ch.scope ? '1px solid var(--border-light)' : 'none'
               }}
@@ -648,12 +694,31 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
   // Modals state
   const [userModalOpen, setUserModalOpen] = useState(false);
+  const [selectedUserTab, setSelectedUserTab] = useState<'portfolio' | 'specialties' | 'location' | 'contacts' | 'works'>('portfolio');
+  const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<any | null>(null);
+  const [lightboxMainImage, setLightboxMainImage] = useState<string | null>(null);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [editUserModalOpen, setEditUserModalOpen] = useState(false);
   const [addChannelModalOpen, setAddChannelModalOpen] = useState(false);
   const [addStoryModalOpen, setAddStoryModalOpen] = useState(false);
   const [addBannerModalOpen, setAddBannerModalOpen] = useState(false);
   const [previewMedia, setPreviewMedia] = useState<{ url: string, type: 'image' | 'video' } | null>(null);
+
+  // Notification state
+  const [notificationModalOpen, setNotificationModalOpen] = useState(false);
+  const [notificationUserId, setNotificationUserId] = useState('');
+  const [notificationUserName, setNotificationUserName] = useState('');
+  const [notificationUserEmail, setNotificationUserEmail] = useState('');
+  const [notificationSubjectSelect, setNotificationSubjectSelect] = useState('Atualização cadastral pendente');
+  const [notificationSubjectCustom, setNotificationSubjectCustom] = useState('');
+  const [notificationMessage, setNotificationMessage] = useState('');
+  const [notificationSending, setNotificationSending] = useState(false);
+
+  // Block user state
+  const [blockUserModalOpen, setBlockUserModalOpen] = useState(false);
+  const [blockUserId, setBlockUserId] = useState('');
+  const [blockUserName, setBlockUserName] = useState('');
+  const [blockReasonText, setBlockReasonText] = useState('');
 
   // Edit user state
   const [editUserId, setEditUserId] = useState('');
@@ -764,7 +829,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       const { data, error: err } = await q.limit(20);
       if (err) throw err;
       setWorksList(data || []);
-      
+
       // Update cache map with retrieved works
       if (data) {
         setResolvedWorksMap(prev => {
@@ -840,7 +905,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       const { data, error: err } = await q.limit(20);
       if (err) throw err;
       setProfilesList(data || []);
-      
+
       // Update cache map with retrieved profiles
       if (data) {
         setResolvedProfilesMap(prev => {
@@ -921,7 +986,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setEditUserName(u.name || '');
     setEditUserEmail(u.email || '');
     setEditUserPhone(u.phone || '');
-    setEditUserBio(u.user_profiles?.[0]?.bio || '');
+    const profile = Array.isArray(u.user_profiles) ? u.user_profiles[0] : u.user_profiles;
+    setEditUserBio(profile?.bio || '');
     setEditUserModalOpen(true);
   };
 
@@ -934,6 +1000,62 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       bio: editUserBio
     });
     setEditUserModalOpen(false);
+  };
+
+  const handleOpenNotification = (userId: string, name: string | null, email: string | null) => {
+    setNotificationUserId(userId);
+    setNotificationUserName(name || 'Sem nome');
+    setNotificationUserEmail(email || 'Sem email');
+    setNotificationSubjectSelect('Atualização cadastral pendente');
+    setNotificationSubjectCustom('');
+    setNotificationMessage('');
+    setNotificationSending(false);
+    setNotificationModalOpen(true);
+  };
+
+  const handleSendNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalSubject = notificationSubjectSelect === 'outro' ? notificationSubjectCustom : notificationSubjectSelect;
+    if (!finalSubject.trim()) {
+      warning('Por favor, informe o assunto da notificação.');
+      return;
+    }
+    if (!notificationMessage.trim()) {
+      warning('Por favor, digite a mensagem da notificação.');
+      return;
+    }
+
+    setNotificationSending(true);
+    try {
+      await notificationsService.sendNotification({
+        userId: notificationUserId,
+        title: finalSubject,
+        body: notificationMessage,
+      });
+      success('Notificação enviada com sucesso!');
+      setNotificationModalOpen(false);
+    } catch (err: any) {
+      error('Erro ao enviar notificação: ' + (err.message || 'Erro desconhecido'));
+    } finally {
+      setNotificationSending(false);
+    }
+  };
+
+  const handleOpenBlockModal = (userId: string, name: string | null) => {
+    setBlockUserId(userId);
+    setBlockUserName(name || 'Sem nome');
+    setBlockReasonText('');
+    setBlockUserModalOpen(true);
+  };
+
+  const handleConfirmBlockUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!blockReasonText.trim()) {
+      warning('Por favor, informe o motivo do bloqueio.');
+      return;
+    }
+    await userHook.updateUserStatus(blockUserId, 'blocked', blockReasonText);
+    setBlockUserModalOpen(false);
   };
 
   const handleDeleteChannel = (ch: any) => {
@@ -1727,10 +1849,10 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           <div className="header-title">
             <h2>
               {activeTab === 'overview' && 'Visão Geral'}
-              {activeTab === 'users' && 'Gerenciamento de Usuários'}
-              {activeTab === 'stories' && 'Publicações e Stories'}
+              {activeTab === 'users' && 'Usuários'}
+              {activeTab === 'stories' && 'Stories'}
               {activeTab === 'banners' && 'Banners'}
-              {activeTab === 'reports' && 'Painel de Denúncias e Moderação'}
+              {activeTab === 'reports' && 'Denúncias'}
               {activeTab === 'settings' && 'Configurações do Sistema'}
             </h2>
           </div>
@@ -1901,31 +2023,36 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       <tr>
                         <th>Nome</th>
                         <th>Email</th>
-                        <th>Telefone</th>
                         <th>Papel</th>
                         <th>Status</th>
-                        <th style={{ textAlign: 'right' }}>Ações</th>
                       </tr>
                     </thead>
                     <tbody>
                       {userHook.loading ? (
                         <tr>
-                          <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                          <td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                             Carregando usuários...
                           </td>
                         </tr>
                       ) : userHook.users.length === 0 ? (
                         <tr>
-                          <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                          <td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                             Nenhum usuário encontrado.
                           </td>
                         </tr>
                       ) : (
                         userHook.users.map((u) => (
-                          <tr key={u.id}>
+                          <tr
+                            key={u.id}
+                            onClick={async () => {
+                              await userHook.loadUserDetails(u.id);
+                              setSelectedUserTab('portfolio');
+                              setUserModalOpen(true);
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          >
                             <td>{u.name || 'Sem nome'}</td>
                             <td>{u.email || 'Sem email'}</td>
-                            <td>{u.phone || 'Sem telefone'}</td>
                             <td>
                               <div style={{ display: 'flex', gap: '4px' }}>
                                 {u.role_flags?.map((r: string) => (
@@ -1939,44 +2066,6 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                               <span className={`badge ${u.status === 'active' ? 'badge-success' : u.status === 'blocked' ? 'badge-danger' : 'badge-warning'}`}>
                                 {u.status}
                               </span>
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
-                              <div style={{ display: 'inline-flex', gap: '8px' }}>
-                                <button
-                                  className="btn btn-secondary btn-sm"
-                                  onClick={async () => {
-                                    await userHook.loadUserDetails(u.id);
-                                    setUserModalOpen(true);
-                                  }}
-                                  title="Ver Detalhes"
-                                >
-                                  <Eye size={14} /> Detalhes
-                                </button>
-                                <button
-                                  className="btn btn-secondary btn-sm"
-                                  onClick={() => handleEditUserClick(u)}
-                                >
-                                  Editar
-                                </button>
-                                {u.status === 'active' ? (
-                                  <button
-                                    className="btn btn-danger btn-sm"
-                                    onClick={() => userHook.updateUserStatus(u.id, 'blocked')}
-                                    title="Bloquear Usuário"
-                                  >
-                                    Bloquear
-                                  </button>
-                                ) : (
-                                  <button
-                                    className="btn btn-primary btn-sm"
-                                    style={{ backgroundColor: 'var(--success)', color: 'white' }}
-                                    onClick={() => userHook.updateUserStatus(u.id, 'active')}
-                                    title="Desbloquear Usuário"
-                                  >
-                                    Ativar
-                                  </button>
-                                )}
-                              </div>
                             </td>
                           </tr>
                         ))
@@ -2951,96 +3040,634 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       {/* ================= MODAL: USER DETAILS ================= */}
       {userModalOpen && userHook.selectedUser && (
         <div className="modal-overlay">
-          <div className="modal-content">
+          <div className="modal-content" style={{ maxWidth: '950px', width: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
             <button className="modal-close" onClick={() => setUserModalOpen(false)}>
               <X size={20} />
             </button>
-            <h3 className="modal-title">Detalhes do Usuário</h3>
+            <h3 className="modal-title">Ficha Detalhada do Usuário</h3>
 
-            <div className="modal-grid-2">
-              <div className="modal-field">
-                <span className="label">Nome Completo</span>
-                <span className="value">{userHook.selectedUser.name || 'Não fornecido'}</span>
-              </div>
-              <div className="modal-field">
-                <span className="label">E-mail</span>
-                <span className="value">{userHook.selectedUser.email || 'Não fornecido'}</span>
-              </div>
-              <div className="modal-field">
-                <span className="label">Telefone</span>
-                <span className="value">{userHook.selectedUser.phone || 'Não fornecido'}</span>
-              </div>
-              <div className="modal-field">
-                <span className="label">Tipo de Documento</span>
-                <span className="value" style={{ textTransform: 'uppercase' }}>
-                  {userHook.selectedUser.document_type || 'Nenhum'}
-                </span>
-              </div>
-              <div className="modal-field">
-                <span className="label">Nacionalidade</span>
-                <span className="value">{userHook.selectedUser.nationality || 'Não informado'}</span>
-              </div>
-              <div className="modal-field">
-                <span className="label">Estado Civil</span>
-                <span className="value">{userHook.selectedUser.marital_status || 'Não informado'}</span>
-              </div>
-              <div className="modal-field">
-                <span className="label">Status</span>
-                <span className="value">
-                  <span className={`badge ${userHook.selectedUser.status === 'active' ? 'badge-success' : 'badge-danger'}`}>
-                    {userHook.selectedUser.status}
-                  </span>
-                </span>
-              </div>
-              <div className="modal-field">
-                <span className="label">Papéis</span>
-                <span className="value">
-                  {userHook.selectedUser.role_flags?.join(' & ') || 'Nenhum'}
-                </span>
-              </div>
-            </div>
+            {(() => {
+              const user = userHook.selectedUser;
+              const profile = Array.isArray(user.user_profiles) ? user.user_profiles[0] : user.user_profiles;
+              const isProfessional = user.role_flags?.includes('profissional');
+              
+              // Define default active tab for non-professionals if necessary
+              const activeUserTab = isProfessional 
+                ? selectedUserTab 
+                : (['location', 'contacts'].includes(selectedUserTab) ? selectedUserTab : 'location');
 
-            {/* Profile Bio */}
-            <div style={{ marginBottom: '24px' }}>
-              <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Bio / Apresentação</span>
-              <p style={{ fontSize: '14px', marginTop: '6px', padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: 'var(--radius-sm)' }}>
-                {userHook.selectedUser.user_profiles?.[0]?.bio || 'Sem biografia cadastrada.'}
-              </p>
-            </div>
+              const renderDetailStars = (rating: number) => {
+                const stars = [];
+                for (let i = 1; i <= 5; i++) {
+                  stars.push(
+                    <Star
+                      key={i}
+                      size={14}
+                      fill={i <= Math.floor(rating) ? "#FFD700" : "none"}
+                      stroke={i <= Math.floor(rating) ? "#FFD700" : "var(--text-muted)"}
+                    />
+                  );
+                }
+                return stars;
+              };
 
-            {/* Base address */}
-            <div style={{ marginBottom: '24px' }}>
-              <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Endereço Base</span>
-              {userHook.selectedUser.addresses?.filter((a: any) => a.type === 'base').map((addr: any) => (
-                <div key={addr.id} style={{ fontSize: '14px', marginTop: '6px', display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  <MapPin size={14} color="var(--primary)" />
-                  <span>{addr.street}, {addr.number} - {addr.district}, {addr.city} - {addr.state}</span>
+              const handleSocialClick = (type: 'whatsapp' | 'telegram' | 'instagram' | 'facebook' | 'email' | 'website', value?: string | null) => {
+                if (!value) return;
+                let url = '';
+                switch (type) {
+                  case 'whatsapp':
+                    const cleanPhone = value.replace(/\D/g, '');
+                    url = cleanPhone.startsWith('55') ? `https://wa.me/${cleanPhone}` : `https://wa.me/55${cleanPhone}`;
+                    break;
+                  case 'instagram':
+                    url = `https://instagram.com/${value.replace('@', '')}`;
+                    break;
+                  case 'facebook':
+                    url = `https://facebook.com/${value}`;
+                    break;
+                  case 'telegram':
+                    url = `https://t.me/${value.replace('@', '')}`;
+                    break;
+                  case 'email':
+                    url = `mailto:${value}`;
+                    break;
+                  case 'website':
+                    url = value.startsWith('http') ? value : `https://${value}`;
+                    break;
+                }
+                window.open(url, '_blank');
+              };
+
+              return (
+                <div className="profile-modal-grid">
+                  {/* Left Column - Hero Profile Card */}
+                  <div className="profile-sidebar">
+                    <div className="profile-avatar-container">
+                      <div className="profile-avatar-wrapper">
+                        {profile?.avatar_url ? (
+                          <img src={profile.avatar_url} className="profile-avatar-img" alt={user.name} />
+                        ) : (
+                          <div className="profile-avatar-placeholder">
+                            {(user.name || '?')[0]}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <h4 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginBottom: '4px' }}>
+                      {user.name || 'Sem nome'}
+                    </h4>
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px', wordBreak: 'break-all' }}>
+                      {user.email}
+                    </p>
+
+                    {/* Rating stars */}
+                    <div className="profile-stars-row">
+                      {renderDetailStars(profile?.rating_avg || 0)}
+                    </div>
+                    <span className="profile-rating-text">
+                      {Number(profile?.rating_avg || 0).toFixed(1)} ({profile?.rating_count || 0} avaliações)
+                    </span>
+
+                    {/* Availability Card for Professionals */}
+                    {isProfessional && (
+                      <div className={`profile-availability-badge ${profile?.is_available ? 'available' : 'unavailable'}`}>
+                        {profile?.is_available ? (
+                          <>
+                            <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--success)' }} />
+                            Disponível para Obras
+                          </>
+                        ) : (
+                          <>
+                            <X size={12} />
+                            Indisponível no momento
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Left Column Meta Fields */}
+                    <div style={{ width: '100%', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '10px', padding: '16px', backgroundColor: 'var(--bg-app)', borderRadius: 'var(--radius-md)', fontSize: '13px' }}>
+                      <div>
+                        <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '10px', textTransform: 'uppercase', fontWeight: 600 }}>Papel</span>
+                        <strong style={{ color: 'var(--text-main)' }}>{user.role_flags?.join(' & ') || 'Nenhum'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '10px', textTransform: 'uppercase', fontWeight: 600 }}>Documento ({user.document_type || 'CPF'})</span>
+                        <strong style={{ color: 'var(--text-main)', fontSize: '12px' }}>{decodeDocumentHash(user.document_hash) || 'Não informado'}</strong>
+                      </div>
+                      {user.nationality && (
+                        <div>
+                          <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '10px', textTransform: 'uppercase', fontWeight: 600 }}>Nacionalidade</span>
+                          <strong style={{ color: 'var(--text-main)' }}>{user.nationality}</strong>
+                        </div>
+                      )}
+                      {user.marital_status && (
+                        <div>
+                          <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '10px', textTransform: 'uppercase', fontWeight: 600 }}>Estado Civil</span>
+                          <strong style={{ color: 'var(--text-main)' }}>{user.marital_status}</strong>
+                        </div>
+                      )}
+                      <div>
+                        <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '10px', textTransform: 'uppercase', fontWeight: 600 }}>Status da Conta</span>
+                        <span className={`badge ${user.status === 'active' ? 'badge-success' : 'badge-danger'}`} style={{ marginTop: '4px' }}>
+                          {user.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Motivo do Bloqueio */}
+                    {user.status === 'blocked' && (
+                      <div style={{ width: '100%', marginTop: '12px', padding: '12px', backgroundColor: 'var(--danger-bg)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-sm)', textAlign: 'left' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--danger)', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <AlertTriangle size={12} /> Conta Bloqueada
+                        </span>
+                        <p style={{ fontSize: '12px', marginTop: '4px', color: 'var(--text-main)', fontWeight: 500 }}>
+                          {user.block_reason || 'Nenhum motivo informado.'}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="profile-sidebar-actions">
+
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => {
+                          setUserModalOpen(false);
+                          handleOpenNotification(user.id, user.name, user.email);
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}
+                      >
+                        <Bell size={14} /> Enviar Notificação
+                      </button>
+
+                      {user.status === 'active' ? (
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => {
+                            setUserModalOpen(false);
+                            handleOpenBlockModal(user.id, user.name);
+                          }}
+                          style={{ justifyContent: 'center' }}
+                        >
+                          Bloquear Conta
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-primary btn-sm"
+                          style={{ backgroundColor: 'var(--success)', color: 'white', justifyContent: 'center' }}
+                          onClick={async () => {
+                            await userHook.updateUserStatus(user.id, 'active');
+                          }}
+                        >
+                          Desbloquear Conta
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Column - Navigation Tabs & Dynamic Content */}
+                  <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    {/* Tab Navigation */}
+                    <div className="profile-tabs-nav">
+                      {isProfessional && (
+                        <>
+                          <button
+                            className={`profile-tab-btn ${activeUserTab === 'portfolio' ? 'active' : ''}`}
+                            onClick={() => setSelectedUserTab('portfolio')}
+                          >
+                            Portfólio (Obras)
+                          </button>
+                          <button
+                            className={`profile-tab-btn ${activeUserTab === 'specialties' ? 'active' : ''}`}
+                            onClick={() => setSelectedUserTab('specialties')}
+                          >
+                            Mestre
+                          </button>
+                        </>
+                      )}
+                      <button
+                        className={`profile-tab-btn ${activeUserTab === 'location' ? 'active' : ''}`}
+                        onClick={() => setSelectedUserTab('location')}
+                      >
+                        Localização
+                      </button>
+                      <button
+                        className={`profile-tab-btn ${activeUserTab === 'contacts' ? 'active' : ''}`}
+                        onClick={() => setSelectedUserTab('contacts')}
+                      >
+                        Contatos e Redes
+                      </button>
+                    </div>
+
+                    {/* Tab Contents */}
+                    <div className="profile-tab-content" style={{ flex: 1 }}>
+                      
+                      {/* TAB: PORTFOLIO */}
+                      {isProfessional && activeUserTab === 'portfolio' && (
+                        <div>
+                          <div style={{ marginBottom: '16px' }}>
+                            <h4 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>Trabalhos Anteriores (Portfólio)</h4>
+                            <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Galeria de obras executadas pelo profissional.</p>
+                          </div>
+
+                          {(() => {
+                            const portfolios = user.portfolio_works || [];
+                            if (portfolios.length === 0) {
+                              return <p style={{ fontSize: '14px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '24px', textAlign: 'center', border: '1px dashed var(--border-light)', borderRadius: 'var(--radius-md)' }}>Nenhuma obra cadastrada no portfólio.</p>;
+                            }
+
+                            return (
+                              <div className="portfolio-grid">
+                                {portfolios.map((item: any) => {
+                                  const coverMedia = item.portfolio_media?.find((m: any) => m.media_type === 'image') || item.portfolio_media?.[0];
+                                  return (
+                                    <div
+                                      key={item.id}
+                                      className="portfolio-card"
+                                      onClick={() => {
+                                        setSelectedPortfolioItem(item);
+                                        setLightboxMainImage(coverMedia?.url || null);
+                                      }}
+                                    >
+                                      <div className="portfolio-card-img-wrapper">
+                                        {coverMedia?.url ? (
+                                          <img src={coverMedia.url} className="portfolio-card-img" alt={item.title} />
+                                        ) : (
+                                          <div className="portfolio-card-placeholder">
+                                            <ImageIcon size={28} />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="portfolio-card-info">
+                                        <h5 className="portfolio-card-title">{item.title}</h5>
+                                        <p className="portfolio-card-desc">{item.description || 'Sem descrição cadastrada.'}</p>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      {/* TAB: SPECIALTIES */}
+                      {isProfessional && activeUserTab === 'specialties' && (
+                        <div>
+                          <div style={{ marginBottom: '16px' }}>
+                            <h4 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>Mestre</h4>
+                            <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Especializações e capacitações técnicas do profissional.</p>
+                          </div>
+
+                          {(() => {
+                            const specs = user.user_specialties || [];
+                            if (specs.length === 0) {
+                              return <p style={{ fontSize: '14px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Nenhuma especialização cadastrada.</p>;
+                            }
+
+                            return (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                                {specs.map((item: any, idx: number) => {
+                                  const spec = Array.isArray(item.specialties) ? item.specialties[0] : item.specialties;
+                                  const specName = spec?.name || 'Especialidade';
+                                  return (
+                                    <span
+                                      key={idx}
+                                      className="badge badge-info"
+                                      style={{
+                                        padding: '8px 16px',
+                                        fontSize: '13px',
+                                        backgroundColor: 'var(--primary-light)',
+                                        color: 'var(--primary)',
+                                        border: '1px solid rgba(239, 68, 68, 0.1)',
+                                        borderRadius: 'var(--radius-sm)',
+                                        textTransform: 'none',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                      }}
+                                    >
+                                      <Award size={14} />
+                                      {specName}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
+
+                          {profile?.bio && (
+                            <div style={{ marginTop: '32px' }}>
+                              <h5 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>Bio / Apresentação Pessoal</h5>
+                              <p style={{ fontSize: '14px', color: 'var(--text-main)', lineHeight: '1.6', padding: '16px', backgroundColor: 'var(--bg-app)', borderRadius: 'var(--radius-md)' }}>
+                                {profile.bio}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* TAB: LOCATION & COVERAGE */}
+                      {activeUserTab === 'location' && (
+                        <div>
+                          {/* Base address */}
+                          <div style={{ marginBottom: '32px' }}>
+                            <h4 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)', marginBottom: '4px' }}>Endereço Base</h4>
+                            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>Localidade de registro principal do usuário.</p>
+
+                            {(() => {
+                              let baseAddresses = user.addresses?.filter((a: any) => a.type === 'base') || [];
+                              if (baseAddresses.length === 0 && user.addresses && user.addresses.length > 0) {
+                                baseAddresses = [user.addresses[0]];
+                              }
+                              if (baseAddresses.length === 0) {
+                                return <p style={{ fontSize: '14px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Nenhum endereço base cadastrado.</p>;
+                              }
+
+                              return baseAddresses.map((addr: any) => (
+                                <div
+                                  key={addr.id}
+                                  style={{
+                                    display: 'flex',
+                                    gap: '12px',
+                                    alignItems: 'center',
+                                    padding: '16px',
+                                    backgroundColor: 'var(--bg-card)',
+                                    border: '1px solid var(--border-light)',
+                                    borderRadius: 'var(--radius-md)'
+                                  }}
+                                >
+                                  <MapPin size={20} style={{ color: 'var(--primary)' }} />
+                                  <div style={{ fontSize: '14px', color: 'var(--text-main)' }}>
+                                    <strong style={{ display: 'block', marginBottom: '2px' }}>Residencial / Base</strong>
+                                    <span>
+                                      {addr.street}, {addr.number}
+                                      {addr.complement ? ` (${addr.complement})` : ''} - {addr.district}, {addr.city} - {addr.state}
+                                      {addr.country ? `, ${addr.country}` : ''}
+                                    </span>
+                                  </div>
+                                </div>
+                              ));
+                            })()}
+                          </div>
+
+                          {/* Coverage Areas for Professionals */}
+                          {isProfessional && (
+                            <div>
+                              <h4 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)', marginBottom: '4px' }}>Área de Cobertura para Serviços</h4>
+                              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>Regiões geográficas onde o profissional está disponível para trabalhar.</p>
+
+                              {(() => {
+                                const coverage = user.professional_coverages?.[0];
+                                if (!coverage) {
+                                  return <p style={{ fontSize: '14px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Nenhuma área de cobertura cadastrada.</p>;
+                                }
+
+                                if (coverage.nationwide) {
+                                  return (
+                                    <div className="coverage-nationwide-card">
+                                      <Globe size={20} />
+                                      <div>
+                                        <strong>Cobertura Nacional</strong>
+                                        <span style={{ display: 'block', fontSize: '13px', marginTop: '2px' }}>O profissional atende chamados em todo o território nacional.</span>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
+                                const states = coverage.states || [];
+                                const cities = coverage.cities || [];
+
+                                if (states.length === 0 && cities.length === 0) {
+                                  return <p style={{ fontSize: '14px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Atuação restrita à cidade base.</p>;
+                                }
+
+                                return (
+                                  <div>
+                                    {states.map((st: string) => {
+                                      const stateCities = cities.filter((c: any) => c.state === st);
+                                      const isEntireState = stateCities.length === 0;
+
+                                      return (
+                                        <div key={st} className="coverage-state-group">
+                                          <div className="coverage-state-header">
+                                            Estado de {st} · {isEntireState ? 'Estado Inteiro' : 'Cidades Selecionadas'}
+                                          </div>
+                                          {!isEntireState ? (
+                                            <div className="coverage-cities-row">
+                                              {stateCities.map((ct: any) => (
+                                                <span key={ct.city_id} className="coverage-city-chip">
+                                                  {ct.city_name}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <span className="badge badge-success" style={{ textTransform: 'none' }}>Atendimento completo em todo o estado</span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* TAB: CONTACTS & SOCIALS */}
+                      {activeUserTab === 'contacts' && (
+                        <div>
+                          <div style={{ marginBottom: '20px' }}>
+                            <h4 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>Canais de Contato e Redes Sociais</h4>
+                            <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Clique em qualquer canal para abrir a conversa ou perfil correspondente.</p>
+                          </div>
+
+                          <div className="social-contacts-grid">
+                            {/* WhatsApp 1 */}
+                            {(profile?.whatsapp_phone || user.phone) && (
+                              <button
+                                className="social-contact-btn"
+                                onClick={() => handleSocialClick('whatsapp', profile?.whatsapp_phone || user.phone)}
+                              >
+                                <span className="social-contact-icon" style={{ color: '#25D366' }}><MessageSquare size={20} /></span>
+                                <div className="social-contact-info">
+                                  <span className="social-contact-label">WhatsApp Principal</span>
+                                  <span className="social-contact-value">{profile?.whatsapp_phone || user.phone}</span>
+                                </div>
+                              </button>
+                            )}
+
+                            {/* WhatsApp 2 */}
+                            {profile?.whatsapp_phone_2 && (
+                              <button
+                                className="social-contact-btn"
+                                onClick={() => handleSocialClick('whatsapp', profile.whatsapp_phone_2)}
+                              >
+                                <span className="social-contact-icon" style={{ color: '#25D366' }}><MessageSquare size={20} /></span>
+                                <div className="social-contact-info">
+                                  <span className="social-contact-label">WhatsApp 2</span>
+                                  <span className="social-contact-value">{profile.whatsapp_phone_2}</span>
+                                </div>
+                              </button>
+                            )}
+
+                            {/* Telegram */}
+                            {profile?.telegram && (
+                              <button
+                                className="social-contact-btn"
+                                onClick={() => handleSocialClick('telegram', profile.telegram)}
+                              >
+                                <span className="social-contact-icon" style={{ color: '#0088cc' }}><Send size={18} /></span>
+                                <div className="social-contact-info">
+                                  <span className="social-contact-label">Telegram</span>
+                                  <span className="social-contact-value">{profile.telegram}</span>
+                                </div>
+                              </button>
+                            )}
+
+                            {/* Email */}
+                            {(profile?.email_contact || user.email) && (
+                              <button
+                                className="social-contact-btn"
+                                onClick={() => handleSocialClick('email', profile?.email_contact || user.email)}
+                              >
+                                <span className="social-contact-icon" style={{ color: 'var(--primary)' }}><Mail size={18} /></span>
+                                <div className="social-contact-info">
+                                  <span className="social-contact-label">Email de Contato</span>
+                                  <span className="social-contact-value">{profile?.email_contact || user.email}</span>
+                                </div>
+                              </button>
+                            )}
+
+                            {/* Instagram */}
+                            {profile?.instagram && (
+                              <button
+                                className="social-contact-btn"
+                                onClick={() => handleSocialClick('instagram', profile.instagram)}
+                              >
+                                <span className="social-contact-icon" style={{ color: '#E4405F' }}>
+                                  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-instagram"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
+                                </span>
+                                <div className="social-contact-info">
+                                  <span className="social-contact-label">Instagram</span>
+                                  <span className="social-contact-value">{profile.instagram}</span>
+                                </div>
+                              </button>
+                            )}
+
+                            {/* Facebook */}
+                            {profile?.facebook && (
+                              <button
+                                className="social-contact-btn"
+                                onClick={() => handleSocialClick('facebook', profile.facebook)}
+                              >
+                                <span className="social-contact-icon" style={{ color: '#1877F2' }}>
+                                  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-facebook"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+                                </span>
+                                <div className="social-contact-info">
+                                  <span className="social-contact-label">Facebook</span>
+                                  <span className="social-contact-value">{profile.facebook}</span>
+                                </div>
+                              </button>
+                            )}
+
+                            {/* Website */}
+                            {profile?.website && (
+                              <button
+                                className="social-contact-btn"
+                                onClick={() => handleSocialClick('website', profile.website)}
+                              >
+                                <span className="social-contact-icon" style={{ color: 'var(--text-muted)' }}><Globe size={18} /></span>
+                                <div className="social-contact-info">
+                                  <span className="social-contact-label">Website</span>
+                                  <span className="social-contact-value">{profile.website}</span>
+                                </div>
+                              </button>
+                            )}
+                          </div>
+
+                          {(!profile?.whatsapp_phone && !user.phone && !profile?.whatsapp_phone_2 && !profile?.telegram && !profile?.email_contact && !profile?.instagram && !profile?.facebook && !profile?.website) && (
+                            <p style={{ fontSize: '14px', color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', padding: '24px' }}>Nenhum canal de contato adicional registrado.</p>
+                          )}
+                        </div>
+                      )}
+
+
+                    </div>
+                  </div>
                 </div>
-              )) || <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Nenhum endereço cadastrado.</p>}
-            </div>
+              );
+            })()}
 
-            {/* Coverage Areas */}
-            {userHook.selectedUser.role_flags?.includes('profissional') && (
-              <div style={{ marginBottom: '24px' }}>
-                <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Área de Cobertura</span>
-                {userHook.selectedUser.professional_coverages?.[0]?.nationwide ? (
-                  <p style={{ fontSize: '14px', marginTop: '6px' }}>Atua em todo o Brasil</p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px', borderTop: '1px solid var(--border-light)', paddingTop: '16px' }}>
+              <button type="button" className="btn btn-primary" onClick={() => setUserModalOpen(false)}>
+                Fechar Ficha
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: PORTFOLIO LIGHTBOX ================= */}
+      {selectedPortfolioItem && (
+        <div className="lightbox-overlay" onClick={() => setSelectedPortfolioItem(null)}>
+          <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <div className="lightbox-header">
+              <h4 className="lightbox-title">{selectedPortfolioItem.title}</h4>
+              <button className="modal-close" onClick={() => setSelectedPortfolioItem(null)} style={{ position: 'static' }}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="lightbox-body">
+              {/* Media viewer */}
+              <div className="lightbox-media-wrapper">
+                {lightboxMainImage ? (
+                  selectedPortfolioItem.portfolio_media?.find((m: any) => m.url === lightboxMainImage)?.media_type === 'video' ? (
+                    <video src={lightboxMainImage} className="lightbox-media-main" controls autoPlay />
+                  ) : (
+                    <img src={lightboxMainImage} className="lightbox-media-main" alt={selectedPortfolioItem.title} />
+                  )
                 ) : (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
-                    {userHook.selectedUser.professional_coverages?.[0]?.states?.map((st: string) => (
-                      <span key={st} className="badge badge-info" style={{ textTransform: 'none' }}>
-                        Estado: {st}
-                      </span>
-                    ))}
-                    {userHook.selectedUser.professional_coverages?.[0]?.cities?.map((ct: any) => (
-                      <span key={ct.city_id} className="badge badge-info" style={{ textTransform: 'none' }}>
-                        {ct.city_name} ({ct.state})
-                      </span>
-                    ))}
+                  <div className="lightbox-media-placeholder">
+                    <ImageIcon size={48} />
+                    <span>Nenhuma imagem ou vídeo disponível</span>
                   </div>
                 )}
               </div>
-            )}
+
+              {/* Thumbnail selector */}
+              {selectedPortfolioItem.portfolio_media && selectedPortfolioItem.portfolio_media.length > 1 && (
+                <div className="lightbox-thumbs-scroll">
+                  {selectedPortfolioItem.portfolio_media.map((media: any, index: number) => (
+                    <div
+                      key={index}
+                      className={`lightbox-thumb ${lightboxMainImage === media.url ? 'active' : ''}`}
+                      onClick={() => setLightboxMainImage(media.url)}
+                    >
+                      {media.media_type === 'video' ? (
+                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#333', color: 'white' }}>
+                          <Film size={20} />
+                        </div>
+                      ) : (
+                        <img src={media.url} className="lightbox-thumb-img" alt={`Thumbnail ${index + 1}`} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Description */}
+              <div className="lightbox-description">
+                <h5 className="lightbox-description-title">Descrição do Trabalho</h5>
+                <p className="lightbox-description-text" style={{ whiteSpace: 'pre-wrap' }}>
+                  {selectedPortfolioItem.description || 'Sem descrição detalhada.'}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -3075,6 +3702,122 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setEditUserModalOpen(false)}>Cancelar</button>
                 <button type="submit" className="btn btn-primary">Salvar Alterações</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: NOTIFY USER ================= */}
+      {notificationModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <button className="modal-close" onClick={() => setNotificationModalOpen(false)}>
+              <X size={20} />
+            </button>
+            <h3 className="modal-title">Enviar Notificação</h3>
+
+            <form onSubmit={handleSendNotification}>
+              <div className="form-group">
+                <label>Destinatário</label>
+                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', fontSize: '14px', border: '1px solid var(--border-light)' }}>
+                  <strong>{notificationUserName}</strong> &lt;{notificationUserEmail}&gt;
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Assunto Predefinido</label>
+                <select
+                  className="select-field"
+                  value={notificationSubjectSelect}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNotificationSubjectSelect(val);
+                    if (val !== 'outro') {
+                      setNotificationSubjectCustom('');
+                    }
+                  }}
+                >
+                  <option value="Atualização cadastral pendente">Atualização cadastral pendente</option>
+                  <option value="Conta bloqueada por violação de termos">Conta bloqueada por violação de termos</option>
+                  <option value="Alerta de segurança">Alerta de segurança</option>
+                  <option value="Aviso de manutenção">Aviso de manutenção</option>
+                  <option value="outro">Outro (digitar assunto personalizado)</option>
+                </select>
+              </div>
+
+              {notificationSubjectSelect === 'outro' && (
+                <div className="form-group">
+                  <label>Assunto Personalizado</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Digite o assunto..."
+                    value={notificationSubjectCustom}
+                    onChange={(e) => setNotificationSubjectCustom(e.target.value)}
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="form-group">
+                <label>Mensagem</label>
+                <textarea
+                  className="textarea-field"
+                  style={{ minHeight: '120px', width: '100%' }}
+                  placeholder="Digite a mensagem da notificação..."
+                  value={notificationMessage}
+                  onChange={(e) => setNotificationMessage(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setNotificationModalOpen(false)} disabled={notificationSending}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={notificationSending}>
+                  {notificationSending ? 'Enviando...' : 'Enviar Notificação'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: BLOCK USER ================= */}
+      {blockUserModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <button className="modal-close" onClick={() => setBlockUserModalOpen(false)}>
+              <X size={20} />
+            </button>
+            <h3 className="modal-title" style={{ color: 'var(--danger)' }}>Bloquear Usuário</h3>
+
+            <form onSubmit={handleConfirmBlockUser}>
+              <div style={{ marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)' }}>
+                Deseja realmente bloquear a conta do usuário <strong>{blockUserName}</strong>? Ele será impedido de acessar o aplicativo móvel.
+              </div>
+
+              <div className="form-group">
+                <label>Motivo do Bloqueio</label>
+                <textarea
+                  className="textarea-field"
+                  style={{ minHeight: '100px', width: '100%' }}
+                  placeholder="Informe o motivo do bloqueio (isso será exibido para o usuário no app)..."
+                  value={blockReasonText}
+                  onChange={(e) => setBlockReasonText(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setBlockUserModalOpen(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-danger">
+                  Bloquear Usuário
+                </button>
               </div>
             </form>
           </div>
@@ -3730,7 +4473,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               <X size={20} />
             </button>
             <h3 className="modal-title">Selecione a Obra</h3>
-            
+
             <div style={{ margin: '16px 0' }}>
               <input
                 type="text"
@@ -3789,7 +4532,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               <X size={20} />
             </button>
             <h3 className="modal-title">Selecione o Perfil</h3>
-            
+
             <div style={{ margin: '16px 0' }}>
               <input
                 type="text"

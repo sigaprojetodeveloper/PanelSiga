@@ -182,6 +182,28 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['banners']['Row'], 'id' | 'created_at'>;
         Update: Partial<Database['public']['Tables']['banners']['Insert']>;
       };
+      portfolio_works: {
+        Row: {
+          id: string;
+          professional_id: string;
+          title: string;
+          description: string | null;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['portfolio_works']['Row'], 'id' | 'created_at'>;
+        Update: Partial<Database['public']['Tables']['portfolio_works']['Insert']>;
+      };
+      portfolio_media: {
+        Row: {
+          id: string;
+          portfolio_work_id: string;
+          url: string;
+          media_type: 'image' | 'video' | 'pdf';
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['portfolio_media']['Row'], 'id' | 'created_at'>;
+        Update: Partial<Database['public']['Tables']['portfolio_media']['Insert']>;
+      };
     };
   };
 }

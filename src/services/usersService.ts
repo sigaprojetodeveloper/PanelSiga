@@ -30,8 +30,8 @@ export const usersService = {
       query = query.contains('role_flags', [role]);
     }
     if (search) {
-      // search in name or email or phone
-      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+      // search in name or email or phone or CPF/CNPJ
+      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,document_hash.ilike.%${search}%`);
     }
 
     query = query
@@ -44,25 +44,78 @@ export const usersService = {
     return { data: data || [], totalCount: count || 0 };
   },
 
+  // eslint-disable-next-line complexity
   async getUserDetails(userId: string) {
-    const { data, error } = await supabase
-      .from('users')
-      .select(`
-        *,
-        user_profiles (*),
-        addresses (*),
-        professional_coverages (*)
-      `)
-      .eq('id', userId)
-      .single();
+    const [detailsResult, createdWorksResult, assignedWorksResult] = await Promise.all([
+      supabase
+        .from('users')
+        .select(`
+          *,
+          user_profiles (*),
+          addresses (*),
+          professional_coverages (*),
+          user_specialties (
+            specialties:view_specialties_translated (id, name, locale)
+          ),
+          portfolio_works (
+            id,
+            title,
+            description,
+            portfolio_media (url, media_type)
+          )
+        `)
+        .eq('id', userId)
+        .single(),
+      supabase
+        .from('works')
+        .select('id, title, status, city, state, created_at')
+        .eq('client_id', userId),
+      supabase
+        .from('works')
+        .select('id, title, status, city, state, created_at')
+        .eq('assigned_professional_id', userId)
+    ]);
 
-    if (error) throw error;
-    return data;
+    if (detailsResult.error) throw detailsResult.error;
+
+    const data = detailsResult.data as any;
+
+    // Auto-upsert default profile if it's missing or empty
+    if (data && (!data.user_profiles || (Array.isArray(data.user_profiles) && data.user_profiles.length === 0))) {
+      const { data: newProfile, error: profileErr } = await (supabase
+        .from('user_profiles') as any)
+        .upsert({ user_id: userId, is_available: true }, { onConflict: 'user_id' })
+        .select()
+        .single();
+      if (!profileErr && newProfile) {
+        data.user_profiles = newProfile;
+      }
+    }
+
+    if (data && Array.isArray(data.user_specialties)) {
+      data.user_specialties = data.user_specialties.filter((us: any) => {
+        const spec = Array.isArray(us.specialties) ? us.specialties[0] : us.specialties;
+        return spec?.locale === 'pt';
+      });
+    }
+
+    return {
+      ...(data as any),
+      created_works: createdWorksResult.data || [],
+      assigned_works: assignedWorksResult.data || []
+    };
   },
 
-  async updateUserStatus(userId: string, status: User['status']) {
+  async updateUserStatus(userId: string, status: User['status'], blockReason?: string | null) {
+    const updatePayload: any = { status, updated_at: new Date().toISOString() };
+    if (status === 'blocked') {
+      updatePayload.block_reason = blockReason || null;
+    } else {
+      updatePayload.block_reason = null;
+    }
+
     const { data, error } = await (supabase.from('users') as any)
-      .update({ status, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq('id', userId)
       .select()
       .single();
