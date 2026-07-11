@@ -1447,23 +1447,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       }
     }
 
-    const targetBanner = {
-      id: editBannerId || undefined,
-      scope: bannerScope,
-      country: bannerScope !== 'global' ? bannerCountry || null : null,
-      state: (bannerScope === 'state' || bannerScope === 'city') ? bannerState || null : null,
-      city: bannerScope === 'city' ? bannerCity || null : null,
-      initialization_date: bannerInitialization,
-      expiration_date: bannerExpiration,
-    };
-
     try {
-      const availability = await checkBannerAvailability(targetBanner);
-      if (!availability.allowed) {
-        warning(availability.message || 'O limite de banners ativos foi ultrapassado.');
-        return;
-      }
-
       const todayStr = getTodayStr();
       const initDate = new Date(bannerInitialization + 'T00:00:00');
       const todayDate = new Date(todayStr + 'T00:00:00');
@@ -1501,7 +1485,6 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       setAddBannerModalOpen(false);
     } catch (err: any) {
       console.error(err);
-      error('Ocorreu um erro ao salvar o banner: ' + err.message);
     }
   };
 
@@ -1535,23 +1518,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
     const targetInitDate = banner.initialization_date > todayStr ? banner.initialization_date : todayStr;
 
-    const targetBanner = {
-      id: banner.id,
-      scope: banner.scope,
-      country: banner.country,
-      state: banner.state,
-      city: banner.city,
-      initialization_date: targetInitDate,
-      expiration_date: targetExpDate
-    };
-
     try {
-      const availability = await checkBannerAvailability(targetBanner);
-      if (!availability.allowed) {
-        warning(availability.message || 'Não há vaga disponível para reativar o banner.');
-        return;
-      }
-
       const initDate = new Date(targetInitDate + 'T00:00:00');
       const todayDate = new Date(todayStr + 'T00:00:00');
       const expDate = new Date(targetExpDate + 'T00:00:00');
@@ -1573,7 +1540,6 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       success('Banner reativado com sucesso!');
     } catch (err: any) {
       console.error(err);
-      error('Falha ao reativar banner: ' + err.message);
     }
   };
 
