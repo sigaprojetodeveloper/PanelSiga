@@ -731,7 +731,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelAvatar, setNewChannelAvatar] = useState('');
   const [newChannelDestaque, setNewChannelDestaque] = useState(false);
-  const [newChannelScope, setNewChannelScope] = useState<'global' | 'national' | 'state' | 'city'>('national');
+  const [newChannelScope, setNewChannelScope] = useState<'national' | 'state' | 'city'>('national');
   const [newChannelCountry, setNewChannelCountry] = useState('Brazil');
   const [newChannelState, setNewChannelState] = useState('');
   const [newChannelCity, setNewChannelCity] = useState('');
@@ -760,7 +760,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [bannerInitialization, setBannerInitialization] = useState('');
   const [bannerExpiration, setBannerExpiration] = useState('');
   const [bannerAspectWarning, setBannerAspectWarning] = useState(false);
-  const [bannerScope, setBannerScope] = useState<'global' | 'national' | 'state' | 'city'>('global');
+  const [bannerScope, setBannerScope] = useState<'national' | 'state'>('national');
   const [bannerCountry, setBannerCountry] = useState('Brazil');
   const [bannerState, setBannerState] = useState('');
   const [bannerCity, setBannerCity] = useState('');
@@ -1164,7 +1164,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       avatar_url: newChannelAvatar || null,
       is_destaque: newChannelDestaque,
       scope: newChannelScope,
-      country: newChannelScope !== 'global' ? newChannelCountry || null : null,
+      country: newChannelCountry || null,
       state: (newChannelScope === 'state' || newChannelScope === 'city') ? newChannelState || null : null,
       city: newChannelScope === 'city' ? newChannelCity || null : null
     } as any;
@@ -1287,7 +1287,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setBannerInitialization(getTodayStr());
     setBannerExpiration('');
     setBannerAspectWarning(false);
-    setBannerScope('global');
+    setBannerScope('national');
     setBannerCountry('Brazil');
     setBannerState('');
     setBannerCity('');
@@ -1309,7 +1309,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setBannerInitialization(banner.initialization_date || getTodayStr());
     setBannerExpiration(banner.expiration_date);
     setBannerAspectWarning(false);
-    setBannerScope(banner.scope || 'global');
+    setBannerScope(banner.scope || 'national');
     setBannerCountry(banner.country || 'Brazil');
     setBannerState(banner.state || '');
     setBannerCity(banner.city || '');
@@ -1345,7 +1345,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     const { data: activeBanners, error: queryError } = await supabase
       .from('banners')
       .select('*')
-      .in('status', ['active', 'scheduled'])
+      .in('status', ['active', 'scheduled', 'awaiting_payment'])
       .lte('initialization_date', endStr)
       .gte('expiration_date', startStr);
 
@@ -1359,20 +1359,12 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       b1: { scope: string; country?: string | null; state?: string | null; city?: string | null },
       b2: { scope: string; country?: string | null; state?: string | null; city?: string | null }
     ) => {
-      if (b1.scope === 'global') return true;
-      if (b2.scope === 'global') return b1.scope === 'global';
-
       if (b1.scope === 'national') {
         return b1.country?.toLowerCase() === b2.country?.toLowerCase();
       }
       if (b1.scope === 'state') {
         return b1.country?.toLowerCase() === b2.country?.toLowerCase() &&
           b1.state?.toLowerCase() === b2.state?.toLowerCase();
-      }
-      if (b1.scope === 'city') {
-        return b1.country?.toLowerCase() === b2.country?.toLowerCase() &&
-          b1.state?.toLowerCase() === b2.state?.toLowerCase() &&
-          b1.city?.toLowerCase() === b2.city?.toLowerCase();
       }
       return false;
     };
@@ -1396,29 +1388,43 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
       const candidates = [...activeOnDate, targetBanner];
 
-      let maxHierarchicalCount = 0;
-      for (const candidate of candidates) {
-        const ancestors = candidates.filter(c => isAncestor(c, candidate));
-        if (ancestors.length > maxHierarchicalCount) {
-          maxHierarchicalCount = ancestors.length;
+      // 1. National limit
+      const nationalBanners = candidates.filter(c => c.scope === 'national' && c.country?.toLowerCase() === targetBanner.country?.toLowerCase());
+      if (nationalBanners.length > 2) {
+        return {
+          allowed: false,
+          message: `O limite de 2 banners nacionais ativos ou aguardando seria excedido no dia ${formatToDDMMYYYY(date)} para o país ${targetBanner.country}.`
+        };
+      }
+
+      // 2. State limit
+      if (targetBanner.scope === 'state' && targetBanner.state) {
+        const stateBanners = candidates.filter(c => c.scope === 'state' && c.country?.toLowerCase() === targetBanner.country?.toLowerCase() && c.state?.toLowerCase() === targetBanner.state?.toLowerCase());
+        if (stateBanners.length > 3) {
+          return {
+            allowed: false,
+            message: `O limite de 3 banners estaduais ativos ou aguardando seria excedido no dia ${formatToDDMMYYYY(date)} para o estado ${targetBanner.state}.`
+          };
         }
       }
 
-      if (maxHierarchicalCount > 5) {
-        let minExpDate = '';
-        for (const b of activeOnDate) {
-          if (!minExpDate || b.expiration_date < minExpDate) {
-            minExpDate = b.expiration_date;
-          }
+      // 3. Total limit of 5 per state
+      const states = Array.from(new Set(candidates.map(c => c.state).filter(Boolean)));
+      if (targetBanner.scope === 'state' && targetBanner.state) {
+        states.push(targetBanner.state);
+      }
+
+      for (const st of states) {
+        const countForState = candidates.filter(c => 
+          c.scope === 'national' || 
+          (c.scope === 'state' && c.state?.toLowerCase() === st?.toLowerCase())
+        ).length;
+        if (countForState > 5) {
+          return {
+            allowed: false,
+            message: `O limite total de 5 banners ativos ou aguardando seria excedido no dia ${formatToDDMMYYYY(date)} no estado ${st?.toUpperCase()}.`
+          };
         }
-
-        const nextDay = getNextDay(minExpDate || date);
-        const formattedNextDay = formatToDDMMYYYY(nextDay);
-
-        return {
-          allowed: false,
-          message: `O limite de 5 banners ativos para esta abrangência seria excedido no dia ${formatToDDMMYYYY(date)}. A primeira data de liberação prevista é ${formattedNextDay}.`
-        };
       }
     }
 
@@ -1448,10 +1454,25 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     }
 
     try {
+      // Validate availability first using the same rules as the DB trigger
+      const availability = await checkBannerAvailability({
+        id: editBannerId || undefined,
+        scope: bannerScope,
+        country: bannerCountry,
+        state: bannerScope === 'state' ? bannerState : null,
+        city: null,
+        initialization_date: bannerInitialization,
+        expiration_date: bannerExpiration
+      });
+
+      if (!availability.allowed) {
+        warning(availability.message || 'O limite de banners ativos seria excedido.');
+        return;
+      }
+
       const todayStr = getTodayStr();
       const initDate = new Date(bannerInitialization + 'T00:00:00');
       const todayDate = new Date(todayStr + 'T00:00:00');
-      const expDate = new Date(bannerExpiration + 'T00:00:00');
 
       let finalStatus: 'scheduled' | 'active' = 'active';
       if (initDate > todayDate) {
@@ -1470,9 +1491,9 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
         initialization_date: bannerInitialization,
         expiration_date: bannerExpiration,
         scope: bannerScope,
-        country: targetBanner.country,
-        state: targetBanner.state,
-        city: targetBanner.city
+        country: bannerCountry || null,
+        state: bannerScope === 'state' ? bannerState || null : null,
+        city: null
       };
 
       if (editBannerId) {
@@ -2100,13 +2121,12 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       }}
                     >
                       <option value="all">Todas as abrangências</option>
-                      <option value="global">Global (Mundo)</option>
                       <option value="national">Nacional</option>
                       <option value="state">Estadual</option>
                       <option value="city">Municipal</option>
                     </select>
                   </div>
-                  {storyHook.scopeFilter !== 'all' && storyHook.scopeFilter !== 'global' && (
+                  {storyHook.scopeFilter !== 'all' && (
                     <div className="filter-control">
                       <label>Filtrar por País</label>
                       <select
@@ -2673,13 +2693,11 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       }}
                     >
                       <option value="all">Todas as abrangências</option>
-                      <option value="global">Global (Mundo)</option>
                       <option value="national">Nacional</option>
                       <option value="state">Estadual</option>
-                      <option value="city">Municipal</option>
                     </select>
                   </div>
-                  {bannersHook.scopeFilter !== 'all' && bannersHook.scopeFilter !== 'global' && (
+                  {bannersHook.scopeFilter !== 'all' && (
                     <div className="filter-control">
                       <label>Filtrar por País</label>
                       <select
@@ -2688,7 +2706,6 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                         onChange={(e) => {
                           bannersHook.setCountryFilter(e.target.value);
                           bannersHook.setStateFilter('all');
-                          bannersHook.setCityFilter('');
                         }}
                       >
                         <option value="all">Todos os Países</option>
@@ -2698,7 +2715,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       </select>
                     </div>
                   )}
-                  {bannersHook.scopeFilter !== 'all' && (bannersHook.scopeFilter === 'state' || bannersHook.scopeFilter === 'city') && bannersHook.countryFilter !== 'all' && (
+                  {bannersHook.scopeFilter !== 'all' && bannersHook.scopeFilter === 'state' && bannersHook.countryFilter !== 'all' && (
                     <div className="filter-control">
                       <label>Filtrar por Estado</label>
                       <select
@@ -2706,7 +2723,6 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                         value={bannersHook.stateFilter}
                         onChange={(e) => {
                           bannersHook.setStateFilter(e.target.value);
-                          bannersHook.setCityFilter('');
                         }}
                       >
                         <option value="all">Todos os Estados</option>
@@ -2718,21 +2734,6 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                           ));
                         })()}
                       </select>
-                    </div>
-                  )}
-                  {bannersHook.scopeFilter === 'city' && (
-                    <div className="filter-control">
-                      <label>Buscar Cidade</label>
-                      <input
-                        type="text"
-                        className="input-field"
-                        placeholder="Ex: São Paulo"
-                        style={{ height: '36px', fontSize: '14px' }}
-                        value={bannersHook.cityFilter}
-                        onChange={(e) => {
-                          bannersHook.setCityFilter(e.target.value);
-                        }}
-                      />
                     </div>
                   )}
                 </div>
@@ -2818,7 +2819,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                 )}
                                 <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <MapPin size={10} /> Abrangência: {banner.scope === 'global' ? 'Global' : banner.scope === 'national' ? `Nacional (${banner.country || 'Brasil'})` : banner.scope === 'state' ? `Estadual (${banner.state || ''})` : banner.scope === 'city' ? `Municipal (${banner.city || ''}/${banner.state || ''})` : banner.scope || 'Global'}
+                                    <MapPin size={10} /> Abrangência: {banner.scope === 'national' ? `Nacional (${banner.country || 'Brasil'})` : banner.scope === 'state' ? `Estadual (${banner.state || ''})` : banner.scope || 'Nacional'}
                                   </span>
                                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <Calendar size={10} /> Início: {new Date(banner.initialization_date).toLocaleDateString()}
@@ -2911,7 +2912,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                   )}
                                   <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      <MapPin size={10} /> Abrangência: {banner.scope === 'global' ? 'Global' : banner.scope === 'national' ? `Nacional (${banner.country || 'Brasil'})` : banner.scope === 'state' ? `Estadual (${banner.state || ''})` : banner.scope === 'city' ? `Municipal (${banner.city || ''}/${banner.state || ''})` : banner.scope || 'Global'}
+                                      <MapPin size={10} /> Abrangência: {banner.scope === 'national' ? `Nacional (${banner.country || 'Brasil'})` : banner.scope === 'state' ? `Estadual (${banner.state || ''})` : banner.scope || 'Nacional'}
                                     </span>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                       <Calendar size={10} /> Início: {new Date(banner.initialization_date).toLocaleDateString()}
@@ -2954,48 +2955,6 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       );
                     })()}
                   </div>
-
-                  {/* Histórico de Banners / Banners Expirados */}
-                  {/* <div>
-                    <h3 style={{ fontSize: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--text-muted)' }}></span>
-                      Histórico de Banners / Não Exibidos (Expirados ou Inativos)
-                    </h3>
-                    {(() => {
-                      const todayStr = getTodayStr();
-                      // Top 5 active banners IDs
-                      const activeBannersIds = bannersHook.banners
-                        .filter(b => b.status === 'active')
-                        .slice(0, 5)
-                        .map(b => b.id);
-
-                      const historicalBanners = bannersHook.banners.filter(
-                        b => !activeBannersIds.includes(b.id) && b.status !== 'scheduled'
-                      );
-
-                      if (historicalBanners.length === 0) {
-                        return (
-                          <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', color: 'var(--text-muted)', textAlign: 'center' }}>
-                            Nenhum banner no histórico.
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-                          {historicalBanners.map((banner) => (
-                            <HistoricalBannerCard
-                              key={banner.id}
-                              banner={banner}
-                              todayStr={todayStr}
-                              onToggleStatus={handleToggleBannerStatus}
-                              onDelete={handleDeleteBannerClick}
-                            />
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div> */}
                 </>
               )}
             </div>
@@ -3829,11 +3788,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     onChange={(e) => {
                       const val = e.target.value as any;
                       setNewChannelScope(val);
-                      if (val === 'global') {
-                        setNewChannelCountry('Brazil');
-                        setNewChannelState('');
-                        setNewChannelCity('');
-                      } else if (val === 'national') {
+                      if (val === 'national') {
                         setNewChannelState('');
                         setNewChannelCity('');
                       } else if (val === 'state') {
@@ -3841,34 +3796,31 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       }
                     }}
                   >
-                    <option value="global">Global (Todo o Mundo)</option>
                     <option value="national">Nacional</option>
                     <option value="state">Estadual</option>
                     <option value="city">Municipal</option>
                   </select>
                 </div>
 
-                {newChannelScope !== 'global' && (
-                  <div className="form-group">
-                    <label>País</label>
-                    <select
-                      className="select-field"
-                      value={newChannelCountry}
-                      disabled={!!editChannelId}
-                      onChange={(e) => {
-                        setNewChannelCountry(e.target.value);
-                        setNewChannelState('');
-                        setNewChannelCity('');
-                      }}
-                      required
-                    >
-                      <option value="">Selecione o País</option>
-                      {Country.getAllCountries().map((c) => (
-                        <option key={c.isoCode} value={c.name}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <div className="form-group">
+                  <label>País</label>
+                  <select
+                    className="select-field"
+                    value={newChannelCountry}
+                    disabled={!!editChannelId}
+                    onChange={(e) => {
+                      setNewChannelCountry(e.target.value);
+                      setNewChannelState('');
+                      setNewChannelCity('');
+                    }}
+                    required
+                  >
+                    <option value="">Selecione o País</option>
+                    {Country.getAllCountries().map((c) => (
+                      <option key={c.isoCode} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {(newChannelScope === 'state' || newChannelScope === 'city') && (
@@ -4184,11 +4136,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     onChange={(e) => {
                       const val = e.target.value as any;
                       setBannerScope(val);
-                      if (val === 'global') {
-                        setBannerCountry('Brazil');
-                        setBannerState('');
-                        setBannerCity('');
-                      } else if (val === 'national') {
+                      if (val === 'national') {
                         setBannerState('');
                         setBannerCity('');
                       } else if (val === 'state') {
@@ -4196,36 +4144,32 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       }
                     }}
                   >
-                    <option value="global">Global (Todo o Mundo)</option>
                     <option value="national">Nacional</option>
                     <option value="state">Estadual</option>
-                    <option value="city">Municipal</option>
                   </select>
                 </div>
 
-                {bannerScope !== 'global' && (
-                  <div className="form-group">
-                    <label>País</label>
-                    <select
-                      className="select-field"
-                      value={bannerCountry}
-                      onChange={(e) => {
-                        setBannerCountry(e.target.value);
-                        setBannerState('');
-                        setBannerCity('');
-                      }}
-                      required
-                    >
-                      <option value="">Selecione o País</option>
-                      {Country.getAllCountries().map((c) => (
-                        <option key={c.isoCode} value={c.name}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <div className="form-group">
+                  <label>País</label>
+                  <select
+                    className="select-field"
+                    value={bannerCountry}
+                    onChange={(e) => {
+                      setBannerCountry(e.target.value);
+                      setBannerState('');
+                      setBannerCity('');
+                    }}
+                    required
+                  >
+                    <option value="">Selecione o País</option>
+                    {Country.getAllCountries().map((c) => (
+                      <option key={c.isoCode} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              {(bannerScope === 'state' || bannerScope === 'city') && (
+              {bannerScope === 'state' && (
                 <div className="grid-2">
                   <div className="form-group">
                     <label>Estado</label>
@@ -4248,29 +4192,6 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       })()}
                     </select>
                   </div>
-
-                  {bannerScope === 'city' && (
-                    <div className="form-group">
-                      <label>Cidade</label>
-                      <select
-                        className="select-field"
-                        value={bannerCity}
-                        onChange={(e) => setBannerCity(e.target.value)}
-                        required
-                      >
-                        <option value="">Selecione a Cidade</option>
-                        {(() => {
-                          const selectedCountryObj = Country.getAllCountries().find(c => c.name === bannerCountry);
-                          const states = selectedCountryObj ? State.getStatesOfCountry(selectedCountryObj.isoCode) : [];
-                          const selectedStateObj = states.find(s => s.isoCode === bannerState);
-                          const cities = (selectedCountryObj && selectedStateObj) ? City.getCitiesOfState(selectedCountryObj.isoCode, selectedStateObj.isoCode) : [];
-                          return cities.map((c) => (
-                            <option key={c.name} value={c.name}>{c.name}</option>
-                          ));
-                        })()}
-                      </select>
-                    </div>
-                  )}
                 </div>
               )}
 
