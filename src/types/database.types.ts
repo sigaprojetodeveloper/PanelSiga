@@ -73,6 +73,10 @@ export interface Database {
           rejection_reason?: string | null;
           data_inicializacao?: string;
           data_expiracao?: string | null;
+          paid?: boolean;
+          payment_date?: string | null;
+          total_price?: number | null;
+          payment_limit_date?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['story_channels']['Row'], 'id' | 'created_at'>;
         Update: Partial<Database['public']['Tables']['story_channels']['Insert']>;
@@ -178,6 +182,10 @@ export interface Database {
           created_at: string;
           user_id?: string | null;
           rejection_reason?: string | null;
+          paid?: boolean;
+          payment_date?: string | null;
+          total_price?: number | null;
+          payment_limit_date?: string | null;
         };
         Insert: Omit<Database['public']['Tables']['banners']['Row'], 'id' | 'created_at'>;
         Update: Partial<Database['public']['Tables']['banners']['Insert']>;
@@ -202,7 +210,19 @@ export interface Database {
           created_at: string;
         };
         Insert: Omit<Database['public']['Tables']['portfolio_media']['Row'], 'id' | 'created_at'>;
-        Update: Partial<Database['public']['Tables']['portfolio_media']['Insert']>;
+        Update: Partial<Database['public']['Tables']['portfolio_media']['Row']>;
+      };
+      ad_pricing: {
+        Row: {
+          id: string;
+          ad_type: 'banner' | 'story';
+          scope: 'global' | 'national' | 'state' | 'city';
+          price_per_day: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['ad_pricing']['Row'], 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['ad_pricing']['Row']>;
       };
     };
   };

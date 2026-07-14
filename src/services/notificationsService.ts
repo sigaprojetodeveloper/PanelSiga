@@ -5,17 +5,19 @@ export const notificationsService = {
     userId: string;
     title: string;
     body: string;
+    type?: string;
+    relatedId?: string | null;
   }) {
-    const { userId, title, body } = params;
+    const { userId, title, body, type = 'admin', relatedId = null } = params;
 
     const { data, error } = await (supabase.from('notifications') as any)
       .insert({
         user_id: userId,
         title,
         body,
-        type: 'admin',
+        type,
         is_read: false,
-        related_id: null,
+        related_id: relatedId,
       });
 
     if (error) {

@@ -11,6 +11,8 @@ import { supabase } from '../lib/supabase';
 import { storiesService } from '../services/storiesService';
 import { notificationsService } from '../services/notificationsService';
 import { useToast } from '../hooks/useToast';
+import { useModeration } from '../hooks/useModeration';
+import { useAdPricing } from '../hooks/useAdPricing';
 import { Country, State, City } from 'country-state-city';
 import logoImg from '../assets/logo.png';
 import ImageCropperModal from './ImageCropperModal';
@@ -42,7 +44,8 @@ import {
   Send,
   MessageSquare,
   Phone,
-  Award
+  Award,
+  Info
 } from 'lucide-react';
 
 const getTodayStr = () => {
@@ -126,6 +129,33 @@ const formatWhatsAppNumber = (val: string) => {
   if (digits.length <= 2) return digits;
   if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+};
+
+const calculateDaysDifference = (startStr?: string, endStr?: string) => {
+  if (!startStr || !endStr) return 0;
+  try {
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays || 1;
+  } catch {
+    return 0;
+  }
+};
+
+const getAdDates = (item: any, type: 'banner' | 'story') => {
+  if (type === 'banner') {
+    return {
+      start: item.initialization_date,
+      end: item.expiration_date
+    };
+  } else {
+    return {
+      start: item.data_inicializacao,
+      end: item.data_expiracao
+    };
+  }
 };
 
 interface ParsedLink {
@@ -665,7 +695,7 @@ interface DashboardProps {
 
 export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const { success, error, warning, info } = useToast();
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'stories' | 'reports' | 'settings' | 'banners'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'stories' | 'reports' | 'settings' | 'banners' | 'moderation' | 'financial'>('overview');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Custom Hooks
@@ -673,6 +703,22 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const reportHook = useReports();
   const storyHook = useStories();
   const bannersHook = useBanners();
+  const moderationHook = useModeration();
+  const adPricingHook = useAdPricing();
+
+  // Moderation state
+  const [adTypeFilter, setAdTypeFilter] = useState<'banner' | 'story'>('banner');
+  const [moderationModalOpen, setModerationModalOpen] = useState(false);
+  const [selectedModerationItem, setSelectedModerationItem] = useState<any | null>(null);
+  const [selectedModerationType, setSelectedModerationType] = useState<'banner' | 'story'>('banner');
+
+  // Rejection modal state
+  const [rejectionReasonModalOpen, setRejectionReasonModalOpen] = useState(false);
+  const [rejectionOption, setRejectionOption] = useState<'low_quality' | 'errors_or_offensive' | 'invalid_link' | 'other'>('low_quality');
+  const [rejectionText, setRejectionText] = useState('');
+
+  // Settings sub-tab state
+  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'banners' | 'stories'>('general');
 
   const currentUserEmail = adminUsername;
 
@@ -760,7 +806,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [bannerInitialization, setBannerInitialization] = useState('');
   const [bannerExpiration, setBannerExpiration] = useState('');
   const [bannerAspectWarning, setBannerAspectWarning] = useState(false);
-  const [bannerScope, setBannerScope] = useState<'national' | 'state'>('national');
+  const [bannerScope, setBannerScope] = useState<'national' | 'state' | 'city'>('national');
   const [bannerCountry, setBannerCountry] = useState('Brazil');
   const [bannerState, setBannerState] = useState('');
   const [bannerCity, setBannerCity] = useState('');
@@ -770,6 +816,16 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
   // State for paginating scheduled banners
   const [scheduledLimit, setScheduledLimit] = useState(5);
+
+  const getScopePrice = (type: 'banner' | 'story', scope: 'global' | 'national' | 'state' | 'city') => {
+    return adPricingHook.prices[type]?.[scope] || 0;
+  };
+
+  const handleOpenModerationDetails = (item: any, type: 'banner' | 'story') => {
+    setSelectedModerationItem(item);
+    setSelectedModerationType(type);
+    setModerationModalOpen(true);
+  };
 
   useEffect(() => {
     setScheduledLimit(5);
@@ -974,12 +1030,165 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [reportNotes, setReportNotes] = useState('');
 
+  // Local state for Overview counts without filters
+  const [newUsersCount, setNewUsersCount] = useState<number | null>(null);
+  const [totalActiveStoriesChannelsCount, setTotalActiveStoriesChannelsCount] = useState<number | null>(null);
+  const [totalActiveBannersCount, setTotalActiveBannersCount] = useState<number | null>(null);
+  const [financialStartDate, setFinancialStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().split('T')[0];
+  });
+  const [financialEndDate, setFinancialEndDate] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+  const [financialIncludeBanners, setFinancialIncludeBanners] = useState(true);
+  const [financialIncludeStories, setFinancialIncludeStories] = useState(true);
+
+  const [financialData, setFinancialData] = useState<{
+    days: { dateStr: string; dateLabel: string; banners: number; stories: number; total: number }[];
+    grandTotal: number;
+    totalBanners: number;
+    totalStories: number;
+  }>({ days: [], grandTotal: 0, totalBanners: 0, totalStories: 0 });
+
+  useEffect(() => {
+    async function fetchFinancialData() {
+      try {
+        if (!financialStartDate || !financialEndDate) return;
+
+        const start = new Date(financialStartDate);
+        start.setHours(0, 0, 0, 0);
+
+        const end = new Date(financialEndDate);
+        end.setHours(23, 59, 59, 999);
+
+        const { data, error: err } = await supabase
+          .from('ad_payments')
+          .select('*')
+          .eq('status', 'paid')
+          .gte('paid_at', start.toISOString())
+          .lte('paid_at', end.toISOString());
+
+        if (!err && data) {
+          const daysMap: Record<string, { dateLabel: string; banners: number; stories: number; total: number }> = {};
+          const dayList: string[] = [];
+
+          let current = new Date(start);
+          const limit = new Date(end);
+          while (current <= limit) {
+            const key = current.toISOString().split('T')[0];
+            const label = current.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+            daysMap[key] = { dateLabel: label, banners: 0, stories: 0, total: 0 };
+            dayList.push(key);
+            current.setDate(current.getDate() + 1);
+          }
+
+          let grandTotalSum = 0;
+          let totalBannersSum = 0;
+          let totalStoriesSum = 0;
+
+          data.forEach((p: any) => {
+            const paidDate = new Date(p.paid_at || p.created_at);
+            const key = paidDate.toISOString().split('T')[0];
+            const amount = parseFloat(p.amount || 0);
+
+            if (daysMap[key]) {
+              const isBanner = !!p.banner_id;
+              const isStory = !!p.story_channel_id;
+
+              if (isBanner && financialIncludeBanners) {
+                daysMap[key].banners += amount;
+                daysMap[key].total += amount;
+                grandTotalSum += amount;
+                totalBannersSum += amount;
+              } else if (isStory && financialIncludeStories) {
+                daysMap[key].stories += amount;
+                daysMap[key].total += amount;
+                grandTotalSum += amount;
+                totalStoriesSum += amount;
+              }
+            }
+          });
+
+          const formattedDays = dayList.map(key => ({
+            dateStr: key,
+            ...daysMap[key]
+          }));
+
+          setFinancialData({
+            days: formattedDays,
+            grandTotal: grandTotalSum,
+            totalBanners: totalBannersSum,
+            totalStories: totalStoriesSum
+          });
+        }
+      } catch (err) {
+        console.error('Erro ao buscar dados financeiros:', err);
+      }
+    }
+    fetchFinancialData();
+  }, [activeTab, financialStartDate, financialEndDate, financialIncludeBanners, financialIncludeStories]);
+
+  useEffect(() => {
+    async function fetchNewUsersCount() {
+      try {
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+        const { count, error: err } = await supabase
+          .from('users')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', oneMonthAgo.toISOString());
+        if (!err && count !== null) {
+          setNewUsersCount(count);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar novos usuários:', err);
+      }
+    }
+    fetchNewUsersCount();
+  }, [userHook.users]);
+
+  useEffect(() => {
+    async function fetchActiveChannelsCount() {
+      try {
+        const { count, error: err } = await supabase
+          .from('story_channels')
+          .select('*', { count: 'exact', head: true })
+          .eq('is_active', true)
+          .neq('status', 'deleted');
+        if (!err && count !== null) {
+          setTotalActiveStoriesChannelsCount(count);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar canais de stories ativos:', err);
+      }
+    }
+    fetchActiveChannelsCount();
+  }, [storyHook.channels]);
+
+  useEffect(() => {
+    async function fetchActiveBannersCount() {
+      try {
+        const { count, error: err } = await supabase
+          .from('banners')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'active');
+        if (!err && count !== null) {
+          setTotalActiveBannersCount(count);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar banners ativos:', err);
+      }
+    }
+    fetchActiveBannersCount();
+  }, [bannersHook.banners]);
+
   // Overview calculated statistics
   const totalUsersCount = userHook.totalCount || 0;
-  const blockedUsersCount = userHook.users.filter(u => u.status === 'blocked').length;
   const pendingReportsCount = reportHook.reports.filter(r => r.status === 'new').length;
-  const activeChannelsCount = storyHook.channels.filter(c => c.is_active).length;
   const selectedChannel = storyHook.channels.find((c: any) => c.id === storyHook.selectedChannelId);
+  const pendingRequestsCount = (moderationHook.pendingBanners || []).length + (moderationHook.pendingStories || []).length;
 
   const handleEditUserClick = (u: any) => {
     setEditUserId(u.id);
@@ -1415,8 +1624,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       }
 
       for (const st of states) {
-        const countForState = candidates.filter(c => 
-          c.scope === 'national' || 
+        const countForState = candidates.filter(c =>
+          c.scope === 'national' ||
           (c.scope === 'state' && c.state?.toLowerCase() === st?.toLowerCase())
         ).length;
         if (countForState > 5) {
@@ -1459,8 +1668,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
         id: editBannerId || undefined,
         scope: bannerScope,
         country: bannerCountry,
-        state: bannerScope === 'state' ? bannerState : null,
-        city: null,
+        state: (bannerScope === 'state' || bannerScope === 'city') ? bannerState : null,
+        city: bannerScope === 'city' ? bannerCity : null,
         initialization_date: bannerInitialization,
         expiration_date: bannerExpiration
       });
@@ -1492,8 +1701,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
         expiration_date: bannerExpiration,
         scope: bannerScope,
         country: bannerCountry || null,
-        state: bannerScope === 'state' ? bannerState || null : null,
-        city: null
+        state: (bannerScope === 'state' || bannerScope === 'city') ? bannerState || null : null,
+        city: bannerScope === 'city' ? bannerCity || null : null
       };
 
       if (editBannerId) {
@@ -1806,6 +2015,31 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           </a>
           <a
             onClick={() => {
+              setActiveTab('moderation');
+              setMobileSidebarOpen(false);
+            }}
+            className={`nav-item ${activeTab === 'moderation' ? 'active' : ''}`}
+          >
+            <Bell size={18} />
+            Solicitações
+            {(moderationHook.pendingBanners.length + moderationHook.pendingStories.length) > 0 && (
+              <span className="badge badge-danger" style={{ marginLeft: 'auto', padding: '2px 6px', fontSize: '10px' }}>
+                {moderationHook.pendingBanners.length + moderationHook.pendingStories.length}
+              </span>
+            )}
+          </a>
+          <a
+            onClick={() => {
+              setActiveTab('financial');
+              setMobileSidebarOpen(false);
+            }}
+            className={`nav-item ${activeTab === 'financial' ? 'active' : ''}`}
+          >
+            <Award size={18} />
+            Financeiro
+          </a>
+          <a
+            onClick={() => {
               setActiveTab('settings');
               setMobileSidebarOpen(false);
             }}
@@ -1840,7 +2074,9 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               {activeTab === 'stories' && 'Stories'}
               {activeTab === 'banners' && 'Banners'}
               {activeTab === 'reports' && 'Denúncias'}
+              {activeTab === 'moderation' && 'Solicitações de Anúncios'}
               {activeTab === 'settings' && 'Configurações do Sistema'}
+              {activeTab === 'financial' && 'Menu Financeiro'}
             </h2>
           </div>
         </header>
@@ -1850,97 +2086,88 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           {activeTab === 'overview' && (
             <div>
               <div className="stats-grid">
-                <div className="stat-card">
+                <div className="stat-card" style={{ position: 'relative' }}>
+                  <Info
+                    size={14}
+                    style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    onClick={() => info("Total de usuários cadastrados no aplicativo (clientes e profissionais).")}
+                  />
                   <div className="stat-info">
                     <h3>Total Usuários</h3>
                     <div className="stat-value">{totalUsersCount}</div>
                   </div>
-                  <div className="stat-icon-wrapper blue">
+                  <div className="stat-icon-wrapper blue" style={{ marginTop: '8px' }}>
                     <Users size={24} />
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className="stat-card" style={{ position: 'relative' }}>
+                  <Info
+                    size={14}
+                    style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    onClick={() => info("Usuários que se cadastraram no aplicativo há menos de 1 mês.")}
+                  />
                   <div className="stat-info">
-                    <h3>Usuários Bloqueados</h3>
-                    <div className="stat-value">{blockedUsersCount}</div>
+                    <h3>Novos Usuários</h3>
+                    <div className="stat-value">{newUsersCount !== null ? newUsersCount : '...'}</div>
                   </div>
-                  <div className="stat-icon-wrapper red">
-                    <UserX size={24} />
+                  <div className="stat-icon-wrapper green" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981', marginTop: '8px' }}>
+                    <Users size={24} />
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className="stat-card" style={{ position: 'relative' }}>
+                  <Info
+                    size={14}
+                    style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    onClick={() => info("Total de denúncias recebidas com status pendente de revisão.")}
+                  />
                   <div className="stat-info">
-                    <h3>Novas Denúncias</h3>
+                    <h3>Denúncias Pendentes</h3>
                     <div className="stat-value">{pendingReportsCount}</div>
                   </div>
-                  <div className="stat-icon-wrapper orange">
+                  <div className="stat-icon-wrapper orange" style={{ marginTop: '8px' }}>
                     <AlertTriangle size={24} />
                   </div>
                 </div>
-                <div className="stat-card">
+                <div className="stat-card" style={{ position: 'relative' }}>
+                  <Info
+                    size={14}
+                    style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    onClick={() => info("Quantidade total de canais de stories ativos no aplicativo, sem restrição de localização.")}
+                  />
                   <div className="stat-info">
                     <h3>Canais de Stories</h3>
-                    <div className="stat-value">{activeChannelsCount}</div>
+                    <div className="stat-value">{totalActiveStoriesChannelsCount !== null ? totalActiveStoriesChannelsCount : '...'}</div>
                   </div>
-                  <div className="stat-icon-wrapper purple">
+                  <div className="stat-icon-wrapper purple" style={{ marginTop: '8px' }}>
                     <Film size={24} />
                   </div>
                 </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '24px' }}>
-                {/* Recent Reports */}
-                <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
-                  <h3 style={{ fontSize: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <AlertTriangle size={18} color="var(--warning)" /> Denúncias Recentes
-                  </h3>
-                  {reportHook.reports.length === 0 ? (
-                    <p style={{ color: 'var(--text-muted)' }}>Nenhuma denúncia registrada.</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {reportHook.reports.slice(0, 5).map((rep) => (
-                        <div
-                          key={rep.id}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            padding: '12px 16px',
-                            backgroundColor: 'var(--bg-app)',
-                            borderRadius: 'var(--radius-sm)',
-                            borderLeft: `4px solid ${rep.status === 'new' ? 'var(--danger)' : 'var(--text-muted)'}`
-                          }}
-                        >
-                          <div>
-                            <span style={{ fontWeight: 600, textTransform: 'capitalize', fontSize: '14px' }}>
-                              Alvo: {rep.target_type}
-                            </span>
-                            <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                              Motivo: {rep.reason} • {new Date(rep.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <span className={`badge ${rep.status === 'new' ? 'badge-danger' : rep.status === 'in_review' ? 'badge-warning' : 'badge-success'}`}>
-                            {rep.status}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                <div className="stat-card" style={{ position: 'relative' }}>
+                  <Info
+                    size={14}
+                    style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    onClick={() => info("Quantidade total de banners publicitários atualmente ativos no aplicativo, sem restrição de localização.")}
+                  />
+                  <div className="stat-info">
+                    <h3>Banners</h3>
+                    <div className="stat-value">{totalActiveBannersCount !== null ? totalActiveBannersCount : '...'}</div>
+                  </div>
+                  <div className="stat-icon-wrapper blue" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', marginTop: '8px' }}>
+                    <ImageIcon size={24} />
+                  </div>
                 </div>
-
-                {/* Quick Actions */}
-                <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
-                  <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Atalhos de Moderação</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <button className="btn btn-secondary" style={{ justifyContent: 'flex-start' }} onClick={() => setActiveTab('users')}>
-                      <Users size={16} /> Ir para Gestão de Usuários
-                    </button>
-                    <button className="btn btn-secondary" style={{ justifyContent: 'flex-start' }} onClick={() => setActiveTab('stories')}>
-                      <Plus size={16} /> Adicionar Novo Canal de Stories
-                    </button>
-                    <button className="btn btn-secondary" style={{ justifyContent: 'flex-start' }} onClick={() => setActiveTab('reports')}>
-                      <AlertTriangle size={16} /> Moderar Denúncias Pendentes
-                    </button>
+                <div className="stat-card" style={{ position: 'relative' }}>
+                  <Info
+                    size={14}
+                    style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    onClick={() => info("Total de solicitações de novos banners ou canais de stories aguardando moderação.")}
+                  />
+                  <div className="stat-info">
+                    <h3>Solicitações Pendentes</h3>
+                    <div className="stat-value">{pendingRequestsCount}</div>
+                  </div>
+                  <div className="stat-icon-wrapper orange" style={{ backgroundColor: 'rgba(249, 115, 22, 0.1)', color: '#f97316', marginTop: '8px' }}>
+                    <FileText size={24} />
                   </div>
                 </div>
               </div>
@@ -2646,28 +2873,653 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           )}
 
           {/* ================= TAB: SETTINGS ================= */}
+          {/* ================= TAB: SETTINGS ================= */}
           {activeTab === 'settings' && (
-            <div style={{ backgroundColor: 'var(--bg-card)', padding: '32px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', maxWidth: '600px' }}>
-              <h3 style={{ fontSize: '20px', marginBottom: '24px' }}>Preferências do Painel</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <div className="form-group">
-                  <label>Nome do Sistema</label>
-                  <input type="text" className="input-field" value="Siga Painel Administrativo" disabled />
-                </div>
-                <div className="form-group">
-                  <label>Versão da API do Supabase</label>
-                  <input type="text" className="input-field" value="v1.0.0-serverless" disabled />
-                </div>
-                <div className="form-group">
-                  <label>Logs de Auditoria</label>
-                  <select className="select-field">
-                    <option>Ativado (Registrar todas as exclusões/bloqueios)</option>
-                    <option>Desativado</option>
-                  </select>
-                </div>
-                <button className="btn btn-primary" style={{ width: 'fit-content' }} onClick={() => success('Configurações salvas.')}>
-                  Salvar Alterações
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* Sub-tabs header */}
+              <div style={{ display: 'flex', gap: '12px', borderBottom: '1px solid var(--border-light)', paddingBottom: '12px' }}>
+                <button
+                  type="button"
+                  className={`btn ${settingsSubTab === 'general' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setSettingsSubTab('general')}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Geral
                 </button>
+                <button
+                  type="button"
+                  className={`btn ${settingsSubTab === 'banners' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setSettingsSubTab('banners')}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Banners
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${settingsSubTab === 'stories' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setSettingsSubTab('stories')}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Stories
+                </button>
+              </div>
+
+              {/* Sub-tab: General */}
+              {settingsSubTab === 'general' && (
+                <div style={{ backgroundColor: 'var(--bg-card)', padding: '32px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', maxWidth: '600px' }}>
+                  <h3 style={{ fontSize: '20px', marginBottom: '24px' }}>Preferências do Painel</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <div className="form-group">
+                      <label>Nome do Sistema</label>
+                      <input type="text" className="input-field" value="Siga Painel Administrativo" disabled />
+                    </div>
+                    <div className="form-group">
+                      <label>Versão da API do Supabase</label>
+                      <input type="text" className="input-field" value="v1.0.0-serverless" disabled />
+                    </div>
+                    <div className="form-group">
+                      <label>Logs de Auditoria</label>
+                      <select className="select-field">
+                        <option>Ativado (Registrar todas as exclusões/bloqueios)</option>
+                        <option>Desativado</option>
+                      </select>
+                    </div>
+                    <button className="btn btn-primary" style={{ width: 'fit-content' }} onClick={() => success('Configurações salvas.')}>
+                      Salvar Alterações
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-tab: Banners */}
+              {settingsSubTab === 'banners' && (
+                <div style={{ backgroundColor: 'var(--bg-card)', padding: '32px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', maxWidth: '600px' }}>
+                  <h3 style={{ fontSize: '20px', marginBottom: '8px' }}>Preços para Banners</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '24px' }}>
+                    Defina os valores cobrados por dia de veiculação do banner por escopo regional.
+                  </p>
+
+                  {adPricingHook.loading ? (
+                    <p style={{ color: 'var(--text-muted)' }}>Carregando preços...</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+                      <div className="form-group">
+                        <label>Preço Nacional (R$ / dia)</label>
+                        <input
+                          type="number"
+                          className="input-field"
+                          value={adPricingHook.prices.banner.national}
+                          onChange={(e) => adPricingHook.updatePrice('banner', 'national', parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Preço Estadual (R$ / dia)</label>
+                        <input
+                          type="number"
+                          className="input-field"
+                          value={adPricingHook.prices.banner.state}
+                          onChange={(e) => adPricingHook.updatePrice('banner', 'state', parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Preço Municipal (R$ / dia)</label>
+                        <input
+                          type="number"
+                          className="input-field"
+                          value={adPricingHook.prices.banner.city}
+                          onChange={(e) => adPricingHook.updatePrice('banner', 'city', parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    className="btn btn-primary"
+                    style={{ width: 'fit-content' }}
+                    onClick={adPricingHook.savePrices}
+                    disabled={adPricingHook.saving || adPricingHook.loading}
+                  >
+                    {adPricingHook.saving ? 'Salvando...' : 'Salvar Preços'}
+                  </button>
+                </div>
+              )}
+
+              {/* Sub-tab: Stories */}
+              {settingsSubTab === 'stories' && (
+                <div style={{ backgroundColor: 'var(--bg-card)', padding: '32px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', maxWidth: '600px' }}>
+                  <h3 style={{ fontSize: '20px', marginBottom: '8px' }}>Preços para Stories</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '24px' }}>
+                    Defina os valores cobrados por dia para **cada story publicado**. Os canais de stories são gratuitos.
+                  </p>
+
+                  {adPricingHook.loading ? (
+                    <p style={{ color: 'var(--text-muted)' }}>Carregando preços...</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+                      <div className="form-group">
+                        <label>Preço Nacional (R$ / dia por story)</label>
+                        <input
+                          type="number"
+                          className="input-field"
+                          value={adPricingHook.prices.story.national}
+                          onChange={(e) => adPricingHook.updatePrice('story', 'national', parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Preço Estadual (R$ / dia por story)</label>
+                        <input
+                          type="number"
+                          className="input-field"
+                          value={adPricingHook.prices.story.state}
+                          onChange={(e) => adPricingHook.updatePrice('story', 'state', parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Preço Municipal (R$ / dia por story)</label>
+                        <input
+                          type="number"
+                          className="input-field"
+                          value={adPricingHook.prices.story.city}
+                          onChange={(e) => adPricingHook.updatePrice('story', 'city', parseFloat(e.target.value) || 0)}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    className="btn btn-primary"
+                    style={{ width: 'fit-content' }}
+                    onClick={adPricingHook.savePrices}
+                    disabled={adPricingHook.saving || adPricingHook.loading}
+                  >
+                    {adPricingHook.saving ? 'Salvando...' : 'Salvar Preços'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ================= TAB: FINANCIAL ================= */}
+          {activeTab === 'financial' && (
+            <div>
+              {/* Grand Total Highlight */}
+              <div style={{
+                backgroundColor: 'var(--bg-card)',
+                padding: '32px',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--border-light)',
+                boxShadow: 'var(--shadow-premium)',
+                marginBottom: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'linear-gradient(135deg, var(--bg-card) 0%, hsla(0, 75%, 50%, 0.03) 100%)'
+              }}>
+                <div>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    Total Geral (Período Selecionado)
+                  </span>
+                  <h1 style={{
+                    fontSize: '48px',
+                    fontWeight: 800,
+                    color: 'var(--primary)',
+                    fontFamily: 'var(--font-title)',
+                    marginTop: '8px',
+                    lineHeight: 1
+                  }}>
+                    R$ {financialData.grandTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </h1>
+                </div>
+                <div style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--primary-light)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--primary)'
+                }}>
+                  <Award size={32} />
+                </div>
+              </div>
+
+              {/* Filters Bar */}
+              <div className="filters-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div className="filter-control">
+                    <label>Data de Início</label>
+                    <input
+                      type="date"
+                      className="input-field"
+                      value={financialStartDate}
+                      onChange={(e) => setFinancialStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="filter-control">
+                    <label>Data de Término</label>
+                    <input
+                      type="date"
+                      className="input-field"
+                      value={financialEndDate}
+                      onChange={(e) => setFinancialEndDate(e.target.value)}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '16px', marginTop: '16px' }}>
+                    <div className="filter-control" style={{ flexDirection: 'row', gap: '8px', alignItems: 'center' }}>
+                      <input
+                        type="checkbox"
+                        id="incBanners"
+                        checked={financialIncludeBanners}
+                        onChange={(e) => setFinancialIncludeBanners(e.target.checked)}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      />
+                      <label htmlFor="incBanners" style={{ cursor: 'pointer', margin: 0, textTransform: 'none', fontSize: '13px', fontWeight: 600 }}>Exibir Banners</label>
+                    </div>
+                    <div className="filter-control" style={{ flexDirection: 'row', gap: '8px', alignItems: 'center' }}>
+                      <input
+                        type="checkbox"
+                        id="incStories"
+                        checked={financialIncludeStories}
+                        onChange={(e) => setFinancialIncludeStories(e.target.checked)}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      />
+                      <label htmlFor="incStories" style={{ cursor: 'pointer', margin: 0, textTransform: 'none', fontSize: '13px', fontWeight: 600 }}>Exibir Stories</label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grid for Charts */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '24px', marginBottom: '32px' }}>
+                {/* Left: Line Chart */}
+                <div style={{
+                  backgroundColor: 'var(--bg-card)',
+                  padding: '24px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-light)',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  <h3 style={{ fontSize: '16px', marginBottom: '24px', fontFamily: 'var(--font-title)' }}>
+                    Histórico de Receitas
+                  </h3>
+
+                  {/* Legend */}
+                  <div style={{ display: 'flex', gap: '20px', marginBottom: '24px', fontSize: '13px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '12px', height: '4px', backgroundColor: '#ef4444', borderRadius: '2px' }} />
+                      <span style={{ fontWeight: 600 }}>Total Geral</span>
+                    </div>
+                    {financialIncludeBanners && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '12px', height: '4px', backgroundColor: '#3b82f6', borderRadius: '2px' }} />
+                        <span>Banners</span>
+                      </div>
+                    )}
+                    {financialIncludeStories && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '12px', height: '4px', backgroundColor: '#8b5cf6', borderRadius: '2px' }} />
+                        <span>Stories</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SVG Chart */}
+                  {financialData.days.length === 0 ? (
+                    <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                      Carregando dados financeiros...
+                    </div>
+                  ) : (
+                    <div style={{ width: '100%', overflowX: 'auto' }}>
+                      <svg viewBox="0 0 650 300" style={{ width: '100%', height: 'auto', minWidth: '600px' }}>
+                        {/* Grid Lines */}
+                        {(() => {
+                          const maxVal = Math.max(...financialData.days.map(d => d.total), 100) * 1.1;
+                          const gridLines = [0, 0.25, 0.5, 0.75, 1];
+                          return gridLines.map((ratio) => {
+                            const y = 40 + (1 - ratio) * 220;
+                            const val = ratio * maxVal;
+                            return (
+                              <g key={ratio}>
+                                <line x1="50" y1={y} x2="600" y2={y} stroke="var(--border-light)" strokeDasharray="4 4" />
+                                <text x="40" y={y + 4} textAnchor="end" fontSize="10" fill="var(--text-muted)">
+                                  R$ {val.toFixed(0)}
+                                </text>
+                              </g>
+                            );
+                          });
+                        })()}
+
+                        {/* X Axis Labels */}
+                        {financialData.days.map((day, index) => {
+                          // Skip label density if many days are selected
+                          const step = Math.max(1, Math.ceil(financialData.days.length / 10));
+                          if (index % step !== 0) return null;
+                          const x = 50 + index * ((600 - 50) / (financialData.days.length - 1 || 1));
+                          return (
+                            <text key={day.dateStr} x={x} y="280" textAnchor="middle" fontSize="10" fill="var(--text-muted)" fontWeight="600">
+                              {day.dateLabel}
+                            </text>
+                          );
+                        })}
+
+                        {/* Line Paths & Dots */}
+                        {(() => {
+                          const maxVal = Math.max(...financialData.days.map(d => d.total), 100) * 1.1;
+                          const pointsBanners: string[] = [];
+                          const pointsStories: string[] = [];
+                          const pointsTotal: string[] = [];
+                          const stepX = (600 - 50) / (financialData.days.length - 1 || 1);
+
+                          financialData.days.forEach((day, index) => {
+                            const x = 50 + index * stepX;
+                            const yBanners = 260 - ((day.banners / maxVal) * 220);
+                            const yStories = 260 - ((day.stories / maxVal) * 220);
+                            const yTotal = 260 - ((day.total / maxVal) * 220);
+
+                            pointsBanners.push(`${x},${yBanners}`);
+                            pointsStories.push(`${x},${yStories}`);
+                            pointsTotal.push(`${x},${yTotal}`);
+                          });
+
+                          return (
+                            <>
+                              {/* Banners Line */}
+                              {financialIncludeBanners && (
+                                <polyline fill="none" stroke="#3b82f6" strokeWidth="2" points={pointsBanners.join(' ')} />
+                              )}
+                              {/* Stories Line */}
+                              {financialIncludeStories && (
+                                <polyline fill="none" stroke="#8b5cf6" strokeWidth="2" points={pointsStories.join(' ')} />
+                              )}
+                              {/* Total Line */}
+                              <polyline fill="none" stroke="#ef4444" strokeWidth="3" points={pointsTotal.join(' ')} />
+
+                              {/* Dots for Total */}
+                              {financialData.days.length <= 15 && financialData.days.map((day, index) => {
+                                const x = 50 + index * stepX;
+                                const yTotal = 260 - ((day.total / maxVal) * 220);
+                                return (
+                                  <circle
+                                    key={day.dateStr}
+                                    cx={x}
+                                    cy={yTotal}
+                                    r="4"
+                                    fill="#ef4444"
+                                    stroke="#fff"
+                                    strokeWidth="1.5"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => info(`${day.dateLabel} - Total: R$ ${day.total.toFixed(2)} (Banners: R$ ${day.banners.toFixed(2)}, Stories: R$ ${day.stories.toFixed(2)})`)}
+                                  />
+                                );
+                              })}
+                            </>
+                          );
+                        })()}
+                      </svg>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: Pie Chart Card */}
+                <div style={{
+                  backgroundColor: 'var(--bg-card)',
+                  padding: '24px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-light)',
+                  boxShadow: 'var(--shadow-sm)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <h3 style={{ fontSize: '16px', marginBottom: '24px', fontFamily: 'var(--font-title)', alignSelf: 'flex-start' }}>
+                    Divisão de Receitas (Pizza)
+                  </h3>
+
+                  {(() => {
+                    const totalVal = financialData.totalBanners + financialData.totalStories;
+                    const bannerPct = totalVal > 0 ? (financialData.totalBanners / totalVal) * 100 : 0;
+                    const storyPct = totalVal > 0 ? (financialData.totalStories / totalVal) * 100 : 0;
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px', width: '100%' }}>
+                        <div style={{
+                          width: '160px',
+                          height: '160px',
+                          borderRadius: '50%',
+                          background: totalVal > 0
+                            ? `conic-gradient(#3b82f6 0% ${bannerPct}%, #8b5cf6 ${bannerPct}% 100%)`
+                            : '#e5e7eb',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          boxShadow: 'var(--shadow-md)'
+                        }}>
+                          <div style={{
+                            width: '95px',
+                            height: '95px',
+                            borderRadius: '50%',
+                            backgroundColor: 'var(--bg-card)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Total</span>
+                            <span style={{ fontSize: '13px', fontWeight: 700 }}>R$ {totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+
+                        {/* Legend details */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', fontSize: '13px', borderTop: '1px solid var(--border-light)', paddingTop: '16px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#3b82f6' }} />
+                              <span>Banners</span>
+                            </div>
+                            <span style={{ fontWeight: 600 }}>
+                              R$ {financialData.totalBanners.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({bannerPct.toFixed(1)}%)
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#8b5cf6' }} />
+                              <span>Stories</span>
+                            </div>
+                            <span style={{ fontWeight: 600 }}>
+                              R$ {financialData.totalStories.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({storyPct.toFixed(1)}%)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Table details */}
+              <div className="table-container">
+                <div className="table-wrapper">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Data</th>
+                        <th>Banners</th>
+                        <th>Stories</th>
+                        <th>Total do Dia</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {financialData.days.map((day) => (
+                        <tr key={day.dateStr}>
+                          <td style={{ fontWeight: 600 }}>{day.dateLabel}</td>
+                          <td>R$ {day.banners.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td>R$ {day.stories.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--primary)' }}>
+                            R$ {day.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================= TAB: MODERATION ================= */}
+          {activeTab === 'moderation' && (
+            <div>
+              {/* Filters Bar */}
+              <div className="filters-bar">
+                <div className="filters-group">
+                  <div className="filter-control">
+                    <label>Tipo de Solicitação</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        className={`btn ${adTypeFilter === 'banner' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setAdTypeFilter('banner')}
+                      >
+                        Banners
+                      </button>
+                      <button
+                        className={`btn ${adTypeFilter === 'story' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setAdTypeFilter('story')}
+                      >
+                        Canais de Stories
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={moderationHook.refetch}
+                  disabled={moderationHook.loading}
+                >
+                  Atualizar Lista
+                </button>
+              </div>
+
+              {/* Moderation Items Table */}
+              <div className="table-container">
+                <div className="table-wrapper">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Anúncio</th>
+                        <th>Solicitante</th>
+                        <th>Abrangência</th>
+                        <th>Vigência</th>
+                        <th>Duração (Dias)</th>
+                        <th>Preço Calculado</th>
+                        <th style={{ textAlign: 'right' }}>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {moderationHook.loading ? (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                            Carregando solicitações pendentes...
+                          </td>
+                        </tr>
+                      ) : (adTypeFilter === 'banner' ? moderationHook.pendingBanners : moderationHook.pendingStories).length === 0 ? (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                            Nenhuma solicitação pendente para este tipo.
+                          </td>
+                        </tr>
+                      ) : (
+                        (adTypeFilter === 'banner' ? moderationHook.pendingBanners : moderationHook.pendingStories).map((item) => {
+                          const name = adTypeFilter === 'banner' ? item.title || 'Sem título' : item.name || 'Sem nome';
+                          const requesterName = item.users?.name || 'Não informado';
+                          const requesterEmail = item.users?.email || '';
+
+                          // Date & price calculations
+                          const { start, end } = getAdDates(item, adTypeFilter);
+                          const days = calculateDaysDifference(start, end);
+                          const pricePerDay = getScopePrice(adTypeFilter, item.scope);
+                          const storiesCount = adTypeFilter === 'story' ? (item.story_items?.length || 0) : 1;
+                          const totalPrice = days * pricePerDay * storiesCount;
+
+                          return (
+                            <tr key={item.id}>
+                              <td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <div style={{
+                                    width: '40px',
+                                    height: '40px',
+                                    borderRadius: 'var(--radius-sm)',
+                                    overflow: 'hidden',
+                                    backgroundColor: '#eee',
+                                    border: '1px solid var(--border-light)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}>
+                                    {(adTypeFilter === 'banner' ? item.image_url : item.avatar_url) ? (
+                                      <img
+                                        src={adTypeFilter === 'banner' ? item.image_url : item.avatar_url}
+                                        alt={name}
+                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                      />
+                                    ) : (
+                                      <span style={{ fontSize: '12px', fontWeight: 600 }}>{name ? name[0] : '?'}</span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <span style={{ fontWeight: 600 }}>{name}</span>
+                                    {adTypeFilter === 'banner' && item.subtitle && (
+                                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)' }}>{item.subtitle}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td>
+                                <div>
+                                  <span style={{ fontWeight: 500 }}>{requesterName}</span>
+                                  {requesterEmail && (
+                                    <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)' }}>{requesterEmail}</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td>
+                                <span style={{ textTransform: 'capitalize' }}>
+                                  {item.scope === 'global' ? 'Global' :
+                                    item.scope === 'national' ? `Nacional (${item.country || 'Brasil'})` :
+                                      item.scope === 'state' ? `Estadual (${item.state || ''})` :
+                                        `Municipal (${item.city || ''})`}
+                                </span>
+                              </td>
+                              <td>
+                                <span style={{ fontSize: '13px' }}>
+                                  {start ? new Date(start).toLocaleDateString('pt-BR') : '-'} até {end ? new Date(end).toLocaleDateString('pt-BR') : '-'}
+                                </span>
+                              </td>
+                              <td>{days}</td>
+                              <td>
+                                <span style={{ fontWeight: 600, color: 'var(--primary)' }}>
+                                  R$ {totalPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                                <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)' }}>
+                                  R$ {pricePerDay.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / dia
+                                </span>
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => handleOpenModerationDetails(item, adTypeFilter)}
+                                >
+                                  Analisar
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -2695,6 +3547,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       <option value="all">Todas as abrangências</option>
                       <option value="national">Nacional</option>
                       <option value="state">Estadual</option>
+                      <option value="city">Municipal</option>
                     </select>
                   </div>
                   {bannersHook.scopeFilter !== 'all' && (
@@ -2706,6 +3559,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                         onChange={(e) => {
                           bannersHook.setCountryFilter(e.target.value);
                           bannersHook.setStateFilter('all');
+                          bannersHook.setCityFilter('');
                         }}
                       >
                         <option value="all">Todos os Países</option>
@@ -2715,7 +3569,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       </select>
                     </div>
                   )}
-                  {bannersHook.scopeFilter !== 'all' && bannersHook.scopeFilter === 'state' && bannersHook.countryFilter !== 'all' && (
+                  {bannersHook.scopeFilter !== 'all' && (bannersHook.scopeFilter === 'state' || bannersHook.scopeFilter === 'city') && bannersHook.countryFilter !== 'all' && (
                     <div className="filter-control">
                       <label>Filtrar por Estado</label>
                       <select
@@ -2734,6 +3588,21 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                           ));
                         })()}
                       </select>
+                    </div>
+                  )}
+                  {bannersHook.scopeFilter === 'city' && (
+                    <div className="filter-control">
+                      <label>Buscar Cidade</label>
+                      <input
+                        type="text"
+                        className="input-field"
+                        placeholder="Ex: São Paulo"
+                        style={{ height: '36px', fontSize: '14px' }}
+                        value={bannersHook.cityFilter}
+                        onChange={(e) => {
+                          bannersHook.setCityFilter(e.target.value);
+                        }}
+                      />
                     </div>
                   )}
                 </div>
@@ -2975,10 +3844,10 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               const user = userHook.selectedUser;
               const profile = Array.isArray(user.user_profiles) ? user.user_profiles[0] : user.user_profiles;
               const isProfessional = user.role_flags?.includes('profissional');
-              
+
               // Define default active tab for non-professionals if necessary
-              const activeUserTab = isProfessional 
-                ? selectedUserTab 
+              const activeUserTab = isProfessional
+                ? selectedUserTab
                 : (['location', 'contacts'].includes(selectedUserTab) ? selectedUserTab : 'location');
 
               const renderDetailStars = (rating: number) => {
@@ -3189,7 +4058,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
                     {/* Tab Contents */}
                     <div className="profile-tab-content" style={{ flex: 1 }}>
-                      
+
                       {/* TAB: PORTFOLIO */}
                       {isProfessional && activeUserTab === 'portfolio' && (
                         <div>
@@ -3475,7 +4344,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                 onClick={() => handleSocialClick('instagram', profile.instagram)}
                               >
                                 <span className="social-contact-icon" style={{ color: '#E4405F' }}>
-                                  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-instagram"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
+                                  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-instagram"><rect width="20" height="20" x="2" y="2" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" x2="17.51" y1="6.5" y2="6.5" /></svg>
                                 </span>
                                 <div className="social-contact-info">
                                   <span className="social-contact-label">Instagram</span>
@@ -3491,7 +4360,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                 onClick={() => handleSocialClick('facebook', profile.facebook)}
                               >
                                 <span className="social-contact-icon" style={{ color: '#1877F2' }}>
-                                  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-facebook"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+                                  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-facebook"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" /></svg>
                                 </span>
                                 <div className="social-contact-info">
                                   <span className="social-contact-label">Facebook</span>
@@ -4146,6 +5015,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   >
                     <option value="national">Nacional</option>
                     <option value="state">Estadual</option>
+                    <option value="city">Municipal</option>
                   </select>
                 </div>
 
@@ -4169,7 +5039,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 </div>
               </div>
 
-              {bannerScope === 'state' && (
+              {(bannerScope === 'state' || bannerScope === 'city') && (
                 <div className="grid-2">
                   <div className="form-group">
                     <label>Estado</label>
@@ -4192,6 +5062,29 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       })()}
                     </select>
                   </div>
+
+                  {bannerScope === 'city' && (
+                    <div className="form-group">
+                      <label>Cidade</label>
+                      <select
+                        className="select-field"
+                        value={bannerCity}
+                        onChange={(e) => setBannerCity(e.target.value)}
+                        required
+                      >
+                        <option value="">Selecione a Cidade</option>
+                        {(() => {
+                          const selectedCountryObj = Country.getAllCountries().find(c => c.name === bannerCountry);
+                          const states = selectedCountryObj ? State.getStatesOfCountry(selectedCountryObj.isoCode) : [];
+                          const selectedStateObj = states.find(s => s.isoCode === bannerState);
+                          const cities = (selectedCountryObj && selectedStateObj) ? City.getCitiesOfState(selectedCountryObj.isoCode, selectedStateObj.isoCode) : [];
+                          return cities.map((c) => (
+                            <option key={c.name} value={c.name}>{c.name}</option>
+                          ));
+                        })()}
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -4464,6 +5357,347 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: MODERATION DETAILS ================= */}
+      {moderationModalOpen && selectedModerationItem && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={() => setModerationModalOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: '850px', width: '95vw', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setModerationModalOpen(false)}>
+              <X size={20} />
+            </button>
+            <h3 className="modal-title">Análise de Solicitação de Publicidade</h3>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '32px', marginBottom: '24px' }}>
+              {/* Media Preview Column */}
+              <div>
+                <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
+                  Conteúdo Enviado
+                </span>
+                {selectedModerationType === 'banner' ? (
+                  <div style={{
+                    border: '1px solid var(--border-light)',
+                    borderRadius: 'var(--radius-md)',
+                    overflow: 'hidden',
+                    backgroundColor: '#000',
+                    aspectRatio: '16/9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    {selectedModerationItem.image_url ? (
+                      <img
+                        src={selectedModerationItem.image_url}
+                        alt="Banner Preview"
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    ) : (
+                      <span style={{ color: '#fff' }}>Sem Imagem</span>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    {/* Story Channel Avatar and details */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-light)' }}>
+                      <div style={{ width: '50px', height: '50px', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#ddd', display: 'flex', alignItems: 'center', justifyItems: 'center' }}>
+                        {selectedModerationItem.avatar_url ? (
+                          <img src={selectedModerationItem.avatar_url} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <span style={{ margin: 'auto', fontWeight: 600 }}>{selectedModerationItem.name ? selectedModerationItem.name[0] : '?'}</span>
+                        )}
+                      </div>
+                      <div>
+                        <span style={{ fontWeight: 600, display: 'block' }}>{selectedModerationItem.name}</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Canal de Stories</span>
+                      </div>
+                    </div>
+
+                    {/* Stories in this channel */}
+                    <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
+                      Stories Publicados ({selectedModerationItem.story_items?.length || 0})
+                    </span>
+                    {(!selectedModerationItem.story_items || selectedModerationItem.story_items.length === 0) ? (
+                      <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Nenhum story enviado. Canal limpo.</p>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px', maxHeight: '250px', overflowY: 'auto' }}>
+                        {selectedModerationItem.story_items.map((story: any) => (
+                          <div
+                            key={story.id}
+                            style={{
+                              border: '1px solid var(--border-light)',
+                              borderRadius: 'var(--radius-sm)',
+                              overflow: 'hidden',
+                              backgroundColor: '#000',
+                              aspectRatio: '9/16',
+                              position: 'relative',
+                              cursor: 'pointer'
+                            }}
+                            onClick={() => setPreviewMedia({ url: story.media_url, type: story.media_type })}
+                          >
+                            {story.media_type === 'image' ? (
+                              <img src={story.media_url} alt="Story" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              <video src={story.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Details Column */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="modal-field">
+                    <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Tipo</span>
+                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{selectedModerationType === 'banner' ? 'Banner Carrossel' : 'Canal de Stories'}</span>
+                  </div>
+                  <div className="modal-field">
+                    <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Nome/Título</span>
+                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{selectedModerationType === 'banner' ? selectedModerationItem.title || 'Sem título' : selectedModerationItem.name}</span>
+                  </div>
+                </div>
+
+                {selectedModerationType === 'banner' && selectedModerationItem.subtitle && (
+                  <div className="modal-field">
+                    <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Subtítulo</span>
+                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{selectedModerationItem.subtitle}</span>
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="modal-field">
+                    <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Solicitante</span>
+                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{selectedModerationItem.users?.name || 'Não informado'}</span>
+                  </div>
+                  <div className="modal-field">
+                    <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>E-mail do Solicitante</span>
+                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{selectedModerationItem.users?.email || 'Não informado'}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="modal-field">
+                    <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Abrangência</span>
+                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)', textTransform: 'capitalize' }}>
+                      {selectedModerationItem.scope === 'global' ? 'Global' :
+                        selectedModerationItem.scope === 'national' ? `Nacional (${selectedModerationItem.country || 'Brasil'})` :
+                          selectedModerationItem.scope === 'state' ? `Estadual (${selectedModerationItem.state || ''})` :
+                            `Municipal (${selectedModerationItem.city || ''})`}
+                    </span>
+                  </div>
+                  <div className="modal-field">
+                    <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Duração</span>
+                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>
+                      {(() => {
+                        const { start, end } = getAdDates(selectedModerationItem, selectedModerationType);
+                        const days = calculateDaysDifference(start, end);
+                        return `${days} ${days === 1 ? 'Dia' : 'Dias'}`;
+                      })()}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="modal-field">
+                    <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Vigência</span>
+                    <span className="value" style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-main)' }}>
+                      {(() => {
+                        const { start, end } = getAdDates(selectedModerationItem, selectedModerationType);
+                        return `${start ? new Date(start).toLocaleDateString('pt-BR') : '-'} até ${end ? new Date(end).toLocaleDateString('pt-BR') : '-'}`;
+                      })()}
+                    </span>
+                  </div>
+                  <div className="modal-field">
+                    <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Preço Total Calculado</span>
+                    <span className="value" style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '16px' }}>
+                      {(() => {
+                        const { start, end } = getAdDates(selectedModerationItem, selectedModerationType);
+                        const days = calculateDaysDifference(start, end);
+                        const pricePerDay = getScopePrice(selectedModerationType, selectedModerationItem.scope);
+                        const storiesCount = selectedModerationType === 'story' ? (selectedModerationItem.story_items?.length || 0) : 1;
+                        const totalPrice = days * pricePerDay * storiesCount;
+                        return `R$ ${totalPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                      })()}
+                    </span>
+                  </div>
+                </div>
+
+                {selectedModerationType === 'banner' && selectedModerationItem.link_url && (
+                  <div className="modal-field">
+                    <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Link de Destino</span>
+                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>
+                      <a href={selectedModerationItem.link_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <LinkIcon size={14} /> {selectedModerationItem.link_label || 'Acessar Link'}
+                      </a>
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-light)', paddingTop: '20px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setModerationModalOpen(false)}
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => {
+                  setRejectionOption('low_quality');
+                  setRejectionText('');
+                  setRejectionReasonModalOpen(true);
+                }}
+              >
+                Recusar Solicitação
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ backgroundColor: 'var(--success)', color: '#fff' }}
+                onClick={async () => {
+                  if (confirm('Deseja realmente aceitar esta solicitação?')) {
+                    const { start, end } = getAdDates(selectedModerationItem, selectedModerationType);
+                    const days = calculateDaysDifference(start, end);
+                    const pricePerDay = getScopePrice(selectedModerationType, selectedModerationItem.scope);
+                    const storiesCount = selectedModerationType === 'story' ? (selectedModerationItem.story_items?.length || 0) : 1;
+                    const totalPrice = days * pricePerDay * storiesCount;
+
+                    await moderationHook.acceptRequest({
+                      type: selectedModerationType,
+                      id: selectedModerationItem.id,
+                      userId: selectedModerationItem.user_id,
+                      adName: selectedModerationType === 'banner' ? selectedModerationItem.title || 'Sem título' : selectedModerationItem.name,
+                      totalPrice: totalPrice
+                    });
+                    setModerationModalOpen(false);
+                  }
+                }}
+                disabled={moderationHook.actionLoading === selectedModerationItem.id}
+              >
+                {moderationHook.actionLoading === selectedModerationItem.id ? 'Aprovando...' : 'Aceitar Solicitação'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: REJECTION REASON ================= */}
+      {rejectionReasonModalOpen && selectedModerationItem && (
+        <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => setRejectionReasonModalOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setRejectionReasonModalOpen(false)}>
+              <X size={20} />
+            </button>
+            <h3 className="modal-title">Justificativa de Recusa</h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', margin: '16px 0' }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                Selecione ou escreva o motivo para recusar esta publicação. O usuário solicitante receberá essa justificativa por notificação.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                  <input
+                    type="radio"
+                    name="rejection_reason_opt"
+                    checked={rejectionOption === 'low_quality'}
+                    onChange={() => setRejectionOption('low_quality')}
+                  />
+                  Imagem de baixa qualidade ou inapropriada
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                  <input
+                    type="radio"
+                    name="rejection_reason_opt"
+                    checked={rejectionOption === 'errors_or_offensive'}
+                    onChange={() => setRejectionOption('errors_or_offensive')}
+                  />
+                  Texto com erros ou ofensivo
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                  <input
+                    type="radio"
+                    name="rejection_reason_opt"
+                    checked={rejectionOption === 'invalid_link'}
+                    onChange={() => setRejectionOption('invalid_link')}
+                  />
+                  Link inválido ou suspeito
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                  <input
+                    type="radio"
+                    name="rejection_reason_opt"
+                    checked={rejectionOption === 'other'}
+                    onChange={() => setRejectionOption('other')}
+                  />
+                  Outro (especificar)
+                </label>
+              </div>
+
+              {rejectionOption === 'other' && (
+                <div className="form-group" style={{ marginTop: '8px' }}>
+                  <label>Especifique o motivo (obrigatório)</label>
+                  <textarea
+                    className="textarea-field"
+                    style={{ minHeight: '80px', width: '100%', boxSizing: 'border-box' }}
+                    value={rejectionText}
+                    onChange={(e) => setRejectionText(e.target.value)}
+                    placeholder="Escreva a justificativa para o usuário..."
+                    required
+                  />
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setRejectionReasonModalOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={async () => {
+                  let reason = '';
+                  if (rejectionOption === 'low_quality') reason = 'Imagem de baixa qualidade ou inapropriada';
+                  else if (rejectionOption === 'errors_or_offensive') reason = 'Texto com erros ou ofensivo';
+                  else if (rejectionOption === 'invalid_link') reason = 'Link inválido ou suspeito';
+                  else {
+                    if (!rejectionText.trim()) {
+                      alert('Por favor, especifique o motivo da recusa.');
+                      return;
+                    }
+                    reason = rejectionText.trim();
+                  }
+
+                  await moderationHook.rejectRequest({
+                    type: selectedModerationType,
+                    id: selectedModerationItem.id,
+                    userId: selectedModerationItem.user_id,
+                    adName: selectedModerationType === 'banner' ? selectedModerationItem.title || 'Sem título' : selectedModerationItem.name,
+                    reason: reason
+                  });
+
+                  setRejectionReasonModalOpen(false);
+                  setModerationModalOpen(false);
+                }}
+                disabled={moderationHook.actionLoading === selectedModerationItem.id}
+              >
+                {moderationHook.actionLoading === selectedModerationItem.id ? 'Recusando...' : 'Confirmar Recusa'}
+              </button>
             </div>
           </div>
         </div>
