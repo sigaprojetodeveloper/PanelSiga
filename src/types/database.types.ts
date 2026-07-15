@@ -215,7 +215,7 @@ export interface Database {
       ad_pricing: {
         Row: {
           id: string;
-          ad_type: 'banner' | 'story';
+          ad_type: 'banner' | 'story' | 'contract';
           scope: 'global' | 'national' | 'state' | 'city';
           price_per_day: number;
           created_at: string;

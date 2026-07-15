@@ -13,6 +13,7 @@ import { notificationsService } from '../services/notificationsService';
 import { useToast } from '../hooks/useToast';
 import { useModeration } from '../hooks/useModeration';
 import { useAdPricing } from '../hooks/useAdPricing';
+import { useAdminUsers } from '../hooks/useAdminUsers';
 import { Country, State, City } from 'country-state-city';
 import logoImg from '../assets/logo.png';
 import ImageCropperModal from './ImageCropperModal';
@@ -45,7 +46,8 @@ import {
   MessageSquare,
   Phone,
   Award,
-  Info
+  Info,
+  Key
 } from 'lucide-react';
 
 const getTodayStr = () => {
@@ -705,6 +707,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const bannersHook = useBanners();
   const moderationHook = useModeration();
   const adPricingHook = useAdPricing();
+  const adminUsersHook = useAdminUsers();
 
   // Moderation state
   const [adTypeFilter, setAdTypeFilter] = useState<'banner' | 'story'>('banner');
@@ -718,7 +721,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [rejectionText, setRejectionText] = useState('');
 
   // Settings sub-tab state
-  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'banners' | 'stories'>('general');
+  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'banners' | 'stories' | 'contracts' | 'admins'>('general');
 
   const currentUserEmail = adminUsername;
 
@@ -750,6 +753,19 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [addBannerModalOpen, setAddBannerModalOpen] = useState(false);
   const [previewMedia, setPreviewMedia] = useState<{ url: string, type: 'image' | 'video' } | null>(null);
 
+  // Admin users modal and form state
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isAdminPasswordModalOpen, setIsAdminPasswordModalOpen] = useState(false);
+  const [selectedAdminId, setSelectedAdminId] = useState<string | null>(null);
+  const [selectedAdminUsername, setSelectedAdminUsername] = useState<string>('');
+  
+  const [newAdminUsername, setNewAdminUsername] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [newAdminConfirmPassword, setNewAdminConfirmPassword] = useState('');
+  
+  const [editAdminPassword, setEditAdminPassword] = useState('');
+  const [editAdminConfirmPassword, setEditAdminConfirmPassword] = useState('');
+
   // Notification state
   const [notificationModalOpen, setNotificationModalOpen] = useState(false);
   const [notificationUserId, setNotificationUserId] = useState('');
@@ -765,6 +781,53 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [blockUserId, setBlockUserId] = useState('');
   const [blockUserName, setBlockUserName] = useState('');
   const [blockReasonText, setBlockReasonText] = useState('');
+
+  // Contract template modal state
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [contractTemplate, setContractTemplate] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('siga_contract_template');
+      if (saved) return saved;
+    }
+    return `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE CONSTRUÇÃO CIVIL
+`;
+  });
+  const [tempTemplateText, setTempTemplateText] = useState('');
+  const [templatePt, setTemplatePt] = useState('');
+  const [templateEn, setTemplateEn] = useState('');
+  const [templateEs, setTemplateEs] = useState('');
+  const [selectedLangTab, setSelectedLangTab] = useState<'pt' | 'en' | 'es'>('pt');
+
+  const fetchContractTemplate = async () => {
+    try {
+      const { data, error: tErr } = await (supabase
+        .from('contract_templates') as any)
+        .select('*')
+        .eq('key', 'default')
+        .single();
+      if (tErr) throw tErr;
+      if (data) {
+        setTemplatePt(data.template_pt);
+        setTemplateEn(data.template_en);
+        setTemplateEs(data.template_es);
+        setContractTemplate(data.template_pt);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar template de contrato do banco:', err);
+    }
+  };
+
+  const handleLangTabChange = (newLang: 'pt' | 'en' | 'es') => {
+    if (selectedLangTab === 'pt') setTemplatePt(tempTemplateText);
+    else if (selectedLangTab === 'en') setTemplateEn(tempTemplateText);
+    else if (selectedLangTab === 'es') setTemplateEs(tempTemplateText);
+
+    setSelectedLangTab(newLang);
+
+    if (newLang === 'pt') setTempTemplateText(templatePt);
+    else if (newLang === 'en') setTempTemplateText(templateEn);
+    else if (newLang === 'es') setTempTemplateText(templateEs);
+  };
 
   // Edit user state
   const [editUserId, setEditUserId] = useState('');
@@ -1032,6 +1095,17 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
   // Local state for Overview counts without filters
   const [newUsersCount, setNewUsersCount] = useState<number | null>(null);
+  const [newContractsCount, setNewContractsCount] = useState<number | null>(null);
+  const [contractValue, setContractValue] = useState<number>(49.90);
+
+  useEffect(() => {
+    if (adPricingHook.prices.contract.global) {
+      setContractValue(adPricingHook.prices.contract.global);
+    }
+  }, [adPricingHook.prices.contract.global]);
+  const [closedContracts, setClosedContracts] = useState<any[]>([]);
+  const [contractsLoading, setContractsLoading] = useState(false);
+  const [contractPricesInput, setContractPricesInput] = useState<Record<string, number>>({});
   const [totalActiveStoriesChannelsCount, setTotalActiveStoriesChannelsCount] = useState<number | null>(null);
   const [totalActiveBannersCount, setTotalActiveBannersCount] = useState<number | null>(null);
   const [financialStartDate, setFinancialStartDate] = useState(() => {
@@ -1044,13 +1118,15 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   });
   const [financialIncludeBanners, setFinancialIncludeBanners] = useState(true);
   const [financialIncludeStories, setFinancialIncludeStories] = useState(true);
+  const [financialIncludeContracts, setFinancialIncludeContracts] = useState(true);
 
   const [financialData, setFinancialData] = useState<{
-    days: { dateStr: string; dateLabel: string; banners: number; stories: number; total: number }[];
+    days: { dateStr: string; dateLabel: string; banners: number; stories: number; contracts: number; total: number }[];
     grandTotal: number;
     totalBanners: number;
     totalStories: number;
-  }>({ days: [], grandTotal: 0, totalBanners: 0, totalStories: 0 });
+    totalContracts: number;
+  }>({ days: [], grandTotal: 0, totalBanners: 0, totalStories: 0, totalContracts: 0 });
 
   useEffect(() => {
     async function fetchFinancialData() {
@@ -1071,7 +1147,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           .lte('paid_at', end.toISOString());
 
         if (!err && data) {
-          const daysMap: Record<string, { dateLabel: string; banners: number; stories: number; total: number }> = {};
+          const daysMap: Record<string, { dateLabel: string; banners: number; stories: number; contracts: number; total: number }> = {};
           const dayList: string[] = [];
 
           let current = new Date(start);
@@ -1079,7 +1155,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           while (current <= limit) {
             const key = current.toISOString().split('T')[0];
             const label = current.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-            daysMap[key] = { dateLabel: label, banners: 0, stories: 0, total: 0 };
+            daysMap[key] = { dateLabel: label, banners: 0, stories: 0, contracts: 0, total: 0 };
             dayList.push(key);
             current.setDate(current.getDate() + 1);
           }
@@ -1087,6 +1163,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           let grandTotalSum = 0;
           let totalBannersSum = 0;
           let totalStoriesSum = 0;
+          let totalContractsSum = 0;
 
           data.forEach((p: any) => {
             const paidDate = new Date(p.paid_at || p.created_at);
@@ -1111,6 +1188,37 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
             }
           });
 
+          if (financialIncludeContracts) {
+            const { data: contractsData, error: cErr } = await supabase
+              .from('contracts')
+              .select('*')
+              .or('client_paid.eq.true,professional_paid.eq.true');
+
+            if (!cErr && contractsData) {
+              contractsData.forEach((contract: any) => {
+                const paymentDateStr = contract.client_payment_date || contract.professional_payment_date || contract.updated_at;
+                const paymentDate = new Date(paymentDateStr);
+                const key = paymentDate.toISOString().split('T')[0];
+
+                let amount = 0;
+                if (contract.client_paid) {
+                  amount += parseFloat(contract.client_payment_amount || 0);
+                } else if (contract.professional_paid) {
+                  amount += parseFloat(contract.professional_payment_amount || 0);
+                }
+
+                if (paymentDate >= start && paymentDate <= end) {
+                  if (daysMap[key]) {
+                    daysMap[key].contracts += amount;
+                    daysMap[key].total += amount;
+                    grandTotalSum += amount;
+                    totalContractsSum += amount;
+                  }
+                }
+              });
+            }
+          }
+
           const formattedDays = dayList.map(key => ({
             dateStr: key,
             ...daysMap[key]
@@ -1120,7 +1228,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
             days: formattedDays,
             grandTotal: grandTotalSum,
             totalBanners: totalBannersSum,
-            totalStories: totalStoriesSum
+            totalStories: totalStoriesSum,
+            totalContracts: totalContractsSum
           });
         }
       } catch (err) {
@@ -1128,7 +1237,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       }
     }
     fetchFinancialData();
-  }, [activeTab, financialStartDate, financialEndDate, financialIncludeBanners, financialIncludeStories]);
+  }, [activeTab, financialStartDate, financialEndDate, financialIncludeBanners, financialIncludeStories, financialIncludeContracts, contractValue]);
 
   useEffect(() => {
     async function fetchNewUsersCount() {
@@ -1148,6 +1257,26 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     }
     fetchNewUsersCount();
   }, [userHook.users]);
+
+  useEffect(() => {
+    async function fetchNewContractsCount() {
+      try {
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+        const { count, error: err } = await supabase
+          .from('proposals')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'aceita')
+          .gte('created_at', oneMonthAgo.toISOString());
+        if (!err && count !== null) {
+          setNewContractsCount(count);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar novos contratos:', err);
+      }
+    }
+    fetchNewContractsCount();
+  }, []);
 
   useEffect(() => {
     async function fetchActiveChannelsCount() {
@@ -1183,6 +1312,114 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     }
     fetchActiveBannersCount();
   }, [bannersHook.banners]);
+
+  const fetchClosedContracts = async () => {
+    setContractsLoading(true);
+    try {
+      const { data: proposalsData, error: pErr } = await (supabase
+        .from('proposals')
+        .select('*') as any)
+        .eq('status', 'aceita');
+
+      if (pErr) throw pErr;
+
+      if (proposalsData && proposalsData.length > 0) {
+        const workIds = proposalsData.map((p: any) => p.work_id).filter(Boolean);
+        const { data: worksData } = await (supabase
+          .from('works')
+          .select('id, title, client_id') as any)
+          .in('id', workIds);
+
+        const budgetIds = proposalsData.map((p: any) => p.budget_id).filter(Boolean);
+        let budgetsData: any[] = [];
+        if (budgetIds.length > 0) {
+          const { data } = await (supabase
+            .from('budgets')
+            .select('id, total_value') as any)
+            .in('id', budgetIds);
+          budgetsData = data || [];
+        }
+
+        const professionalIds = proposalsData.map((p: any) => p.professional_id).filter(Boolean);
+        const clientIds = worksData?.map((w: any) => w.client_id).filter(Boolean) || [];
+        const allUserIds = Array.from(new Set([...professionalIds, ...clientIds]));
+
+        let usersData: any[] = [];
+        if (allUserIds.length > 0) {
+          const { data } = await (supabase
+            .from('users')
+            .select('id, name') as any)
+            .in('id', allUserIds);
+          usersData = data || [];
+        }
+
+        const mapped = proposalsData.map((prop: any) => {
+          const work = worksData?.find((w: any) => w.id === prop.work_id);
+          const budget = budgetsData?.find((b: any) => b.id === prop.budget_id);
+          const professional = usersData?.find((u: any) => u.id === prop.professional_id);
+          const client = usersData?.find((u: any) => u.id === work?.client_id);
+
+          const savedOverride = typeof window !== 'undefined' ? localStorage.getItem(`siga_contract_val_${prop.id}`) : null;
+          const currentVal = savedOverride ? parseFloat(savedOverride) : (budget?.total_value || contractValue);
+
+          return {
+            ...prop,
+            workTitle: work?.title || 'Obra sem título',
+            professionalName: professional?.name || 'Profissional não identificado',
+            clientName: client?.name || 'Cliente não identificado',
+            budgetValue: currentVal
+          };
+        });
+
+        const initialInputs: Record<string, number> = {};
+        mapped.forEach((c: any) => {
+          initialInputs[c.id] = c.budgetValue;
+        });
+        setContractPricesInput(initialInputs);
+        setClosedContracts(mapped);
+      } else {
+        setClosedContracts([]);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar contratos:', err);
+    } finally {
+      setContractsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'settings' && settingsSubTab === 'contracts') {
+      fetchClosedContracts();
+      fetchContractTemplate();
+    }
+  }, [activeTab, settingsSubTab, contractValue]);
+
+  const handleSaveContractValue = async (contract: any) => {
+    const val = contractPricesInput[contract.id];
+    if (val === undefined || isNaN(val)) {
+      warning('Por favor, informe um valor válido.');
+      return;
+    }
+
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`siga_contract_val_${contract.id}`, val.toString());
+      }
+
+      if (contract.budget_id) {
+        const { error: bErr } = await (supabase
+          .from('budgets') as any)
+          .update({ total_value: val })
+          .eq('id', contract.budget_id);
+        if (bErr) throw bErr;
+      }
+
+      success('Valor do contrato atualizado com sucesso!');
+      fetchClosedContracts();
+    } catch (err: any) {
+      error('Erro ao salvar valor do contrato: ' + err.message);
+    }
+  };
 
   // Overview calculated statistics
   const totalUsersCount = userHook.totalCount || 0;
@@ -1785,6 +2022,63 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setReportModalOpen(false);
   };
 
+  const handleCreateAdminSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAdminUsername || !newAdminPassword || !newAdminConfirmPassword) {
+      error('Por favor, preencha todos os campos.');
+      return;
+    }
+    if (newAdminPassword !== newAdminConfirmPassword) {
+      error('As senhas não coincidem.');
+      return;
+    }
+    const success = await adminUsersHook.createAdmin({
+      username: newAdminUsername,
+      password: newAdminPassword,
+    });
+    if (success) {
+      setIsAdminModalOpen(false);
+      setNewAdminUsername('');
+      setNewAdminPassword('');
+      setNewAdminConfirmPassword('');
+    }
+  };
+
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAdminId) return;
+    if (!editAdminPassword || !editAdminConfirmPassword) {
+      error('Por favor, preencha todos os campos.');
+      return;
+    }
+    if (editAdminPassword !== editAdminConfirmPassword) {
+      error('As senhas não coincidem.');
+      return;
+    }
+    const success = await adminUsersHook.changePassword(selectedAdminId, editAdminPassword);
+    if (success) {
+      setIsAdminPasswordModalOpen(false);
+      setEditAdminPassword('');
+      setEditAdminConfirmPassword('');
+      setSelectedAdminId(null);
+    }
+  };
+
+  const handleDeleteAdminClick = (admin: any) => {
+    if (admin.username === adminUsername) {
+      error('Você não pode excluir sua própria conta.');
+      return;
+    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Excluir Administrador',
+      message: `Tem certeza que deseja excluir o administrador "${admin.username}"? Esta ação é irreversível e removerá o acesso desta conta ao painel.`,
+      onConfirm: async () => {
+        await adminUsersHook.deleteAdmin(admin.id);
+      }
+    });
+  };
+
   const renderLinkConfigFields = (
     type: 'none' | 'whatsapp' | 'external' | 'internal',
     setType: (t: any) => void,
@@ -1970,13 +2264,13 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           </a>
           <a
             onClick={() => {
-              setActiveTab('users');
+              setActiveTab('financial');
               setMobileSidebarOpen(false);
             }}
-            className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
+            className={`nav-item ${activeTab === 'financial' ? 'active' : ''}`}
           >
-            <Users size={18} />
-            Usuários
+            <Award size={18} />
+            Financeiro
           </a>
           <a
             onClick={() => {
@@ -2000,18 +2294,13 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           </a>
           <a
             onClick={() => {
-              setActiveTab('reports');
+              setActiveTab('users');
               setMobileSidebarOpen(false);
             }}
-            className={`nav-item ${activeTab === 'reports' ? 'active' : ''}`}
+            className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
           >
-            <AlertTriangle size={18} />
-            Denúncias
-            {pendingReportsCount > 0 && (
-              <span className="badge badge-danger" style={{ marginLeft: 'auto', padding: '2px 6px', fontSize: '10px' }}>
-                {pendingReportsCount}
-              </span>
-            )}
+            <Users size={18} />
+            Usuários
           </a>
           <a
             onClick={() => {
@@ -2030,13 +2319,18 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           </a>
           <a
             onClick={() => {
-              setActiveTab('financial');
+              setActiveTab('reports');
               setMobileSidebarOpen(false);
             }}
-            className={`nav-item ${activeTab === 'financial' ? 'active' : ''}`}
+            className={`nav-item ${activeTab === 'reports' ? 'active' : ''}`}
           >
-            <Award size={18} />
-            Financeiro
+            <AlertTriangle size={18} />
+            Denúncias
+            {pendingReportsCount > 0 && (
+              <span className="badge badge-danger" style={{ marginLeft: 'auto', padding: '2px 6px', fontSize: '10px' }}>
+                {pendingReportsCount}
+              </span>
+            )}
           </a>
           <a
             onClick={() => {
@@ -2076,7 +2370,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               {activeTab === 'reports' && 'Denúncias'}
               {activeTab === 'moderation' && 'Solicitações de Anúncios'}
               {activeTab === 'settings' && 'Configurações do Sistema'}
-              {activeTab === 'financial' && 'Menu Financeiro'}
+              {activeTab === 'financial' && 'Financeiro'}
             </h2>
           </div>
         </header>
@@ -2112,6 +2406,20 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   </div>
                   <div className="stat-icon-wrapper green" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981', marginTop: '8px' }}>
                     <Users size={24} />
+                  </div>
+                </div>
+                <div className="stat-card" style={{ position: 'relative' }}>
+                  <Info
+                    size={14}
+                    style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    onClick={() => info("Contratos fechados (propostas aceitas) há menos de 1 mês.")}
+                  />
+                  <div className="stat-info">
+                    <h3>Novos Contratos</h3>
+                    <div className="stat-value">{newContractsCount !== null ? newContractsCount : '...'}</div>
+                  </div>
+                  <div className="stat-icon-wrapper blue" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', marginTop: '8px' }}>
+                    <FileText size={24} />
                   </div>
                 </div>
                 <div className="stat-card" style={{ position: 'relative' }}>
@@ -2902,6 +3210,22 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 >
                   Stories
                 </button>
+                <button
+                  type="button"
+                  className={`btn ${settingsSubTab === 'contracts' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setSettingsSubTab('contracts')}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Contratos
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${settingsSubTab === 'admins' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setSettingsSubTab('admins')}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Usuários Admin
+                </button>
               </div>
 
               {/* Sub-tab: General */}
@@ -3036,6 +3360,210 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   </button>
                 </div>
               )}
+
+              {/* Sub-tab: Contracts */}
+              {settingsSubTab === 'contracts' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                  {/* General & Template Configuration Cards */}
+                  <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', width: '100%' }}>
+                    <div style={{ flex: 1, minWidth: '300px', backgroundColor: 'var(--bg-card)', padding: '32px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
+                      <h3 style={{ fontSize: '20px', marginBottom: '8px' }}>Configurações de Contratos</h3>
+                      <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '24px' }}>
+                        Defina o valor padrão/taxa base para a formalização e fechamento de contratos no aplicativo.
+                      </p>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+                        <div className="form-group">
+                          <label>Valor Padrão do Contrato (R$)</label>
+                          <input
+                            type="number"
+                            className="input-field"
+                            value={adPricingHook.prices.contract.global}
+                            onChange={(e) => adPricingHook.updatePrice('contract', 'global', parseFloat(e.target.value) || 0)}
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        className="btn btn-primary"
+                        style={{ width: 'fit-content' }}
+                        onClick={adPricingHook.savePrices}
+                        disabled={adPricingHook.saving || adPricingHook.loading}
+                      >
+                        {adPricingHook.saving ? 'Salvando...' : 'Salvar Valor Padrão'}
+                      </button>
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: '300px', backgroundColor: 'var(--bg-card)', padding: '32px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <div>
+                        <h3 style={{ fontSize: '20px', marginBottom: '8px' }}>Modelo do Contrato</h3>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '24px' }}>
+                          Visualize e altere o texto base do modelo de contrato utilizado na plataforma pelos usuários.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          setSelectedLangTab('pt');
+                          setTempTemplateText(templatePt || contractTemplate);
+                          setIsTemplateModalOpen(true);
+                        }}
+                        style={{ width: 'fit-content' }}
+                      >
+                        Visualizar e Alterar Modelo
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-tab: Admins */}
+              {settingsSubTab === 'admins' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                  <div className="filters-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                    <div style={{ display: 'flex', gap: '12px', flex: 1, minWidth: '250px' }}>
+                      <div style={{ position: 'relative', width: '100%', maxWidth: '300px' }}>
+                        <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                        <input
+                          type="text"
+                          className="input-field"
+                          placeholder="Buscar administrador..."
+                          value={adminUsersHook.search}
+                          onChange={(e) => {
+                            adminUsersHook.setSearch(e.target.value);
+                            adminUsersHook.setPage(1);
+                          }}
+                          style={{ paddingLeft: '38px', width: '100%' }}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setNewAdminUsername('');
+                        setNewAdminPassword('');
+                        setNewAdminConfirmPassword('');
+                        setIsAdminModalOpen(true);
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      <Plus size={16} /> Novo Administrador
+                    </button>
+                  </div>
+
+                  <div className="table-container">
+                    <div className="table-wrapper">
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th>Usuário</th>
+                            <th>Data de Criação</th>
+                            <th style={{ textAlign: 'right' }}>Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {adminUsersHook.loading ? (
+                            <tr>
+                              <td colSpan={3} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                                Carregando administradores...
+                              </td>
+                            </tr>
+                          ) : adminUsersHook.adminUsers.length === 0 ? (
+                            <tr>
+                              <td colSpan={3} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                                Nenhum administrador encontrado.
+                              </td>
+                            </tr>
+                          ) : (
+                            adminUsersHook.adminUsers.map((admin) => (
+                              <tr key={admin.id}>
+                                <td>
+                                  <span style={{ fontWeight: 600 }}>{admin.username}</span>
+                                  {admin.username === adminUsername && (
+                                    <span className="badge badge-success" style={{ marginLeft: '8px', fontSize: '10px' }}>Você</span>
+                                  )}
+                                </td>
+                                <td>
+                                  {new Date(admin.created_at).toLocaleDateString('pt-BR')} às {new Date(admin.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                </td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary btn-sm"
+                                      onClick={() => {
+                                        setSelectedAdminId(admin.id);
+                                        setSelectedAdminUsername(admin.username);
+                                        setEditAdminPassword('');
+                                        setEditAdminConfirmPassword('');
+                                        setIsAdminPasswordModalOpen(true);
+                                      }}
+                                      style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px' }}
+                                      title="Alterar Senha"
+                                    >
+                                      <Key size={14} /> Alterar Senha
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary btn-sm"
+                                      onClick={() => handleDeleteAdminClick(admin)}
+                                      disabled={admin.username === adminUsername}
+                                      style={{
+                                        color: admin.username === adminUsername ? 'var(--text-muted)' : 'var(--danger)',
+                                        opacity: admin.username === adminUsername ? 0.5 : 1,
+                                        cursor: admin.username === adminUsername ? 'not-allowed' : 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '6px'
+                                      }}
+                                      title={admin.username === adminUsername ? "Você não pode excluir a si mesmo" : "Excluir Administrador"}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination */}
+                    {adminUsersHook.totalCount > 0 && (
+                      <div className="pagination">
+                        <div className="pagination-info">
+                          Total: {adminUsersHook.totalCount} administradores
+                        </div>
+                        <div className="pagination-actions">
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            disabled={adminUsersHook.page === 1}
+                            onClick={() => adminUsersHook.setPage(p => p - 1)}
+                          >
+                            Anterior
+                          </button>
+                          <span style={{ fontSize: '13px', display: 'flex', alignItems: 'center' }}>
+                            Página {adminUsersHook.page}
+                          </span>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            disabled={adminUsersHook.adminUsers.length < 20}
+                            onClick={() => adminUsersHook.setPage(p => p + 1)}
+                          >
+                            Próxima
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -3043,50 +3571,23 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           {activeTab === 'financial' && (
             <div>
               {/* Grand Total Highlight */}
-              <div style={{
-                backgroundColor: 'var(--bg-card)',
-                padding: '32px',
-                borderRadius: 'var(--radius-lg)',
-                border: '1px solid var(--border-light)',
-                boxShadow: 'var(--shadow-premium)',
-                marginBottom: '24px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: 'linear-gradient(135deg, var(--bg-card) 0%, hsla(0, 75%, 50%, 0.03) 100%)'
-              }}>
+              <div className="financial-total-card">
                 <div>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                  <span className="financial-total-label">
                     Total Geral (Período Selecionado)
                   </span>
-                  <h1 style={{
-                    fontSize: '48px',
-                    fontWeight: 800,
-                    color: 'var(--primary)',
-                    fontFamily: 'var(--font-title)',
-                    marginTop: '8px',
-                    lineHeight: 1
-                  }}>
+                  <h1 className="financial-total-value">
                     R$ {financialData.grandTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </h1>
                 </div>
-                <div style={{
-                  width: '64px',
-                  height: '64px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--primary-light)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--primary)'
-                }}>
+                <div className="financial-total-icon-container">
                   <Award size={32} />
                 </div>
               </div>
 
               {/* Filters Bar */}
-              <div className="filters-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center', marginBottom: '24px' }}>
-                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div className="filters-bar financial-filters-bar">
+                <div className="financial-filters-group">
                   <div className="filter-control">
                     <label>Data de Início</label>
                     <input
@@ -3105,8 +3606,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       onChange={(e) => setFinancialEndDate(e.target.value)}
                     />
                   </div>
-                  <div style={{ display: 'flex', gap: '16px', marginTop: '16px' }}>
-                    <div className="filter-control" style={{ flexDirection: 'row', gap: '8px', alignItems: 'center' }}>
+                  <div className="financial-checkboxes-container">
+                    <div className="filter-control filter-control-checkbox">
                       <input
                         type="checkbox"
                         id="incBanners"
@@ -3116,7 +3617,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       />
                       <label htmlFor="incBanners" style={{ cursor: 'pointer', margin: 0, textTransform: 'none', fontSize: '13px', fontWeight: 600 }}>Exibir Banners</label>
                     </div>
-                    <div className="filter-control" style={{ flexDirection: 'row', gap: '8px', alignItems: 'center' }}>
+                    <div className="filter-control filter-control-checkbox">
                       <input
                         type="checkbox"
                         id="incStories"
@@ -3126,26 +3627,30 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       />
                       <label htmlFor="incStories" style={{ cursor: 'pointer', margin: 0, textTransform: 'none', fontSize: '13px', fontWeight: 600 }}>Exibir Stories</label>
                     </div>
+                    <div className="filter-control filter-control-checkbox">
+                      <input
+                        type="checkbox"
+                        id="incContracts"
+                        checked={financialIncludeContracts}
+                        onChange={(e) => setFinancialIncludeContracts(e.target.checked)}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      />
+                      <label htmlFor="incContracts" style={{ cursor: 'pointer', margin: 0, textTransform: 'none', fontSize: '13px', fontWeight: 600 }}>Exibir Contratos</label>
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Grid for Charts */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '24px', marginBottom: '32px' }}>
+              <div className="financial-charts-grid">
                 {/* Left: Line Chart */}
-                <div style={{
-                  backgroundColor: 'var(--bg-card)',
-                  padding: '24px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-light)',
-                  boxShadow: 'var(--shadow-sm)'
-                }}>
+                <div className="financial-chart-card">
                   <h3 style={{ fontSize: '16px', marginBottom: '24px', fontFamily: 'var(--font-title)' }}>
                     Histórico de Receitas
                   </h3>
 
                   {/* Legend */}
-                  <div style={{ display: 'flex', gap: '20px', marginBottom: '24px', fontSize: '13px' }}>
+                  <div className="financial-chart-legend">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <div style={{ width: '12px', height: '4px', backgroundColor: '#ef4444', borderRadius: '2px' }} />
                       <span style={{ fontWeight: 600 }}>Total Geral</span>
@@ -3160,6 +3665,12 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{ width: '12px', height: '4px', backgroundColor: '#8b5cf6', borderRadius: '2px' }} />
                         <span>Stories</span>
+                      </div>
+                    )}
+                    {financialIncludeContracts && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '12px', height: '4px', backgroundColor: '#10b981', borderRadius: '2px' }} />
+                        <span>Contratos</span>
                       </div>
                     )}
                   </div>
@@ -3208,6 +3719,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                           const maxVal = Math.max(...financialData.days.map(d => d.total), 100) * 1.1;
                           const pointsBanners: string[] = [];
                           const pointsStories: string[] = [];
+                          const pointsContracts: string[] = [];
                           const pointsTotal: string[] = [];
                           const stepX = (600 - 50) / (financialData.days.length - 1 || 1);
 
@@ -3215,10 +3727,12 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                             const x = 50 + index * stepX;
                             const yBanners = 260 - ((day.banners / maxVal) * 220);
                             const yStories = 260 - ((day.stories / maxVal) * 220);
+                            const yContracts = 260 - (((day.contracts || 0) / maxVal) * 220);
                             const yTotal = 260 - ((day.total / maxVal) * 220);
 
                             pointsBanners.push(`${x},${yBanners}`);
                             pointsStories.push(`${x},${yStories}`);
+                            pointsContracts.push(`${x},${yContracts}`);
                             pointsTotal.push(`${x},${yTotal}`);
                           });
 
@@ -3231,6 +3745,10 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                               {/* Stories Line */}
                               {financialIncludeStories && (
                                 <polyline fill="none" stroke="#8b5cf6" strokeWidth="2" points={pointsStories.join(' ')} />
+                              )}
+                              {/* Contracts Line */}
+                              {financialIncludeContracts && (
+                                <polyline fill="none" stroke="#10b981" strokeWidth="2" points={pointsContracts.join(' ')} />
                               )}
                               {/* Total Line */}
                               <polyline fill="none" stroke="#ef4444" strokeWidth="3" points={pointsTotal.join(' ')} />
@@ -3249,7 +3767,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                     stroke="#fff"
                                     strokeWidth="1.5"
                                     style={{ cursor: 'pointer' }}
-                                    onClick={() => info(`${day.dateLabel} - Total: R$ ${day.total.toFixed(2)} (Banners: R$ ${day.banners.toFixed(2)}, Stories: R$ ${day.stories.toFixed(2)})`)}
+                                    onClick={() => info(`${day.dateLabel} - Total: R$ ${day.total.toFixed(2)} (Banners: R$ ${day.banners.toFixed(2)}, Stories: R$ ${day.stories.toFixed(2)}, Contratos: R$ ${(day.contracts || 0).toFixed(2)})`)}
                                   />
                                 );
                               })}
@@ -3262,57 +3780,32 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 </div>
 
                 {/* Right: Pie Chart Card */}
-                <div style={{
-                  backgroundColor: 'var(--bg-card)',
-                  padding: '24px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-light)',
-                  boxShadow: 'var(--shadow-sm)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
+                <div className="financial-chart-card financial-pie-card">
                   <h3 style={{ fontSize: '16px', marginBottom: '24px', fontFamily: 'var(--font-title)', alignSelf: 'flex-start' }}>
                     Divisão de Receitas (Pizza)
                   </h3>
 
                   {(() => {
-                    const totalVal = financialData.totalBanners + financialData.totalStories;
+                    const totalVal = financialData.totalBanners + financialData.totalStories + (financialData.totalContracts || 0);
                     const bannerPct = totalVal > 0 ? (financialData.totalBanners / totalVal) * 100 : 0;
                     const storyPct = totalVal > 0 ? (financialData.totalStories / totalVal) * 100 : 0;
+                    const contractPct = totalVal > 0 ? ((financialData.totalContracts || 0) / totalVal) * 100 : 0;
 
                     return (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px', width: '100%' }}>
-                        <div style={{
-                          width: '160px',
-                          height: '160px',
-                          borderRadius: '50%',
+                      <div className="financial-pie-wrapper">
+                        <div className="financial-pie-circle" style={{
                           background: totalVal > 0
-                            ? `conic-gradient(#3b82f6 0% ${bannerPct}%, #8b5cf6 ${bannerPct}% 100%)`
+                            ? `conic-gradient(#3b82f6 0% ${bannerPct}%, #8b5cf6 ${bannerPct}% ${bannerPct + storyPct}%, #10b981 ${bannerPct + storyPct}% 100%)`
                             : '#e5e7eb',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          boxShadow: 'var(--shadow-md)'
                         }}>
-                          <div style={{
-                            width: '95px',
-                            height: '95px',
-                            borderRadius: '50%',
-                            backgroundColor: 'var(--bg-card)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}>
+                          <div className="financial-pie-inner">
                             <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Total</span>
-                            <span style={{ fontSize: '13px', fontWeight: 700 }}>R$ {totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="financial-pie-total-value">R$ {totalVal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           </div>
                         </div>
 
                         {/* Legend details */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', fontSize: '13px', borderTop: '1px solid var(--border-light)', paddingTop: '16px' }}>
+                        <div className="financial-pie-legend">
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#3b82f6' }} />
@@ -3331,6 +3824,15 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                               R$ {financialData.totalStories.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({storyPct.toFixed(1)}%)
                             </span>
                           </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#10b981' }} />
+                              <span>Contratos</span>
+                            </div>
+                            <span style={{ fontWeight: 600 }}>
+                              R$ {(financialData.totalContracts || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({contractPct.toFixed(1)}%)
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );
@@ -3347,6 +3849,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                         <th>Data</th>
                         <th>Banners</th>
                         <th>Stories</th>
+                        <th>Contratos</th>
                         <th>Total do Dia</th>
                       </tr>
                     </thead>
@@ -3356,6 +3859,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                           <td style={{ fontWeight: 600 }}>{day.dateLabel}</td>
                           <td>R$ {day.banners.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           <td>R$ {day.stories.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td>R$ {(day.contracts || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           <td style={{ fontWeight: 700, color: 'var(--primary)' }}>
                             R$ {day.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
@@ -4618,6 +5122,112 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
         </div>
       )}
 
+      {/* ================= MODAL: CONTRACT TEMPLATE ================= */}
+      {isTemplateModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '700px', width: '90%' }}>
+            <button className="modal-close" onClick={() => setIsTemplateModalOpen(false)}>
+              <X size={20} />
+            </button>
+            <h3 className="modal-title">Modelo do Contrato</h3>
+
+            <div style={{ marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)' }}>
+              Altere o modelo de texto base que será gerado quando os usuários firmarem um contrato de prestação de serviços.
+            </div>
+
+            {/* Language tabs */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid var(--border-light)', paddingBottom: '12px' }}>
+              <button
+                type="button"
+                className={`btn ${selectedLangTab === 'pt' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => handleLangTabChange('pt')}
+                style={{ padding: '6px 12px', fontSize: '12px' }}
+              >
+                Português
+              </button>
+              <button
+                type="button"
+                className={`btn ${selectedLangTab === 'en' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => handleLangTabChange('en')}
+                style={{ padding: '6px 12px', fontSize: '12px' }}
+              >
+                Inglês
+              </button>
+              <button
+                type="button"
+                className={`btn ${selectedLangTab === 'es' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => handleLangTabChange('es')}
+                style={{ padding: '6px 12px', fontSize: '12px' }}
+              >
+                Espanhol
+              </button>
+            </div>
+
+            <div className="form-group">
+              <label>Texto do Modelo de Contrato ({selectedLangTab.toUpperCase()})</label>
+              <textarea
+                className="textarea-field"
+                style={{ minHeight: '350px', width: '100%', fontFamily: 'monospace', fontSize: '13px', lineHeight: '1.6' }}
+                value={tempTemplateText}
+                onChange={(e) => setTempTemplateText(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setIsTemplateModalOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={async () => {
+                  let latestPt = templatePt;
+                  let latestEn = templateEn;
+                  let latestEs = templateEs;
+
+                  if (selectedLangTab === 'pt') {
+                    latestPt = tempTemplateText;
+                    setTemplatePt(tempTemplateText);
+                  } else if (selectedLangTab === 'en') {
+                    latestEn = tempTemplateText;
+                    setTemplateEn(tempTemplateText);
+                  } else if (selectedLangTab === 'es') {
+                    latestEs = tempTemplateText;
+                    setTemplateEs(tempTemplateText);
+                  }
+
+                  try {
+                    const { error: saveErr } = await (supabase
+                      .from('contract_templates') as any)
+                      .upsert({
+                        key: 'default',
+                        template_pt: latestPt,
+                        template_en: latestEn,
+                        template_es: latestEs,
+                        updated_at: new Date().toISOString()
+                      }, { onConflict: 'key' });
+
+                    if (saveErr) throw saveErr;
+
+                    setContractTemplate(latestPt);
+                    success('Modelo do contrato atualizado com sucesso no banco de dados!');
+                    setIsTemplateModalOpen(false);
+                  } catch (err: any) {
+                    error('Erro ao salvar modelo no banco: ' + err.message);
+                  }
+                }}
+              >
+                Salvar Alterações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ================= MODAL: ADD CHANNEL ================= */}
       {addChannelModalOpen && (
         <div className="modal-overlay">
@@ -5699,6 +6309,136 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 {moderationHook.actionLoading === selectedModerationItem.id ? 'Recusando...' : 'Confirmar Recusa'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: CREATE ADMIN USER ================= */}
+      {isAdminModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => setIsAdminModalOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setIsAdminModalOpen(false)}>
+              <X size={20} />
+            </button>
+            <h3 className="modal-title">Novo Administrador</h3>
+            
+            <form onSubmit={handleCreateAdminSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+              <div className="form-group">
+                <label htmlFor="admin_username">Usuário</label>
+                <input
+                  id="admin_username"
+                  type="text"
+                  className="input-field"
+                  placeholder="Nome de usuário"
+                  value={newAdminUsername}
+                  onChange={(e) => setNewAdminUsername(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="admin_password">Senha</label>
+                <input
+                  id="admin_password"
+                  type="password"
+                  className="input-field"
+                  placeholder="Senha"
+                  value={newAdminPassword}
+                  onChange={(e) => setNewAdminPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="admin_confirm_password">Confirmar Senha</label>
+                <input
+                  id="admin_confirm_password"
+                  type="password"
+                  className="input-field"
+                  placeholder="Confirme a senha"
+                  value={newAdminConfirmPassword}
+                  onChange={(e) => setNewAdminConfirmPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsAdminModalOpen(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={adminUsersHook.loading}
+                >
+                  {adminUsersHook.loading ? 'Salvando...' : 'Criar Administrador'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: EDIT ADMIN PASSWORD ================= */}
+      {isAdminPasswordModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 1200 }} onClick={() => setIsAdminPasswordModalOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setIsAdminPasswordModalOpen(false)}>
+              <X size={20} />
+            </button>
+            <h3 className="modal-title">Alterar Senha do Administrador</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+              Alterando a senha do usuário: <strong>{selectedAdminUsername}</strong>
+            </p>
+
+            <form onSubmit={handleChangePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group">
+                <label htmlFor="edit_admin_password">Nova Senha</label>
+                <input
+                  id="edit_admin_password"
+                  type="password"
+                  className="input-field"
+                  placeholder="Nova senha"
+                  value={editAdminPassword}
+                  onChange={(e) => setEditAdminPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="edit_admin_confirm_password">Confirmar Nova Senha</label>
+                <input
+                  id="edit_admin_confirm_password"
+                  type="password"
+                  className="input-field"
+                  placeholder="Confirme a nova senha"
+                  value={editAdminConfirmPassword}
+                  onChange={(e) => setEditAdminConfirmPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsAdminPasswordModalOpen(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={adminUsersHook.loading}
+                >
+                  {adminUsersHook.loading ? 'Salvando...' : 'Alterar Senha'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

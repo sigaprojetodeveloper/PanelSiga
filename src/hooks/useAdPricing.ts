@@ -10,7 +10,8 @@ export function useAdPricing() {
 
   const [prices, setPrices] = useState({
     banner: { global: 0, national: 0, state: 0, city: 0 },
-    story: { global: 0, national: 0, state: 0, city: 0 }
+    story: { global: 0, national: 0, state: 0, city: 0 },
+    contract: { global: 0 }
   });
 
   const fetchPrices = useCallback(async () => {
@@ -20,13 +21,16 @@ export function useAdPricing() {
       const data = await adPricingService.getPricingSettings();
       const newPrices = {
         banner: { global: 0, national: 0, state: 0, city: 0 },
-        story: { global: 0, national: 0, state: 0, city: 0 }
+        story: { global: 0, national: 0, state: 0, city: 0 },
+        contract: { global: 0 }
       };
       data.forEach((item: any) => {
         if (item.ad_type === 'banner' || item.ad_type === 'story') {
           const type = item.ad_type as 'banner' | 'story';
           const scope = item.scope as 'global' | 'national' | 'state' | 'city';
           newPrices[type][scope] = Number(item.price_per_day);
+        } else if (item.ad_type === 'contract') {
+          newPrices.contract.global = Number(item.price_per_day);
         }
       });
       setPrices(newPrices);
@@ -41,7 +45,7 @@ export function useAdPricing() {
     fetchPrices();
   }, [fetchPrices]);
 
-  const updatePrice = (type: 'banner' | 'story', scope: 'global' | 'national' | 'state' | 'city', value: number) => {
+  const updatePrice = (type: 'banner' | 'story' | 'contract', scope: 'global' | 'national' | 'state' | 'city', value: number) => {
     setPrices((prev) => ({
       ...prev,
       [type]: {
@@ -62,11 +66,12 @@ export function useAdPricing() {
         { ad_type: 'story', scope: 'global', price_per_day: prices.story.global },
         { ad_type: 'story', scope: 'national', price_per_day: prices.story.national },
         { ad_type: 'story', scope: 'state', price_per_day: prices.story.state },
-        { ad_type: 'story', scope: 'city', price_per_day: prices.story.city }
+        { ad_type: 'story', scope: 'city', price_per_day: prices.story.city },
+        { ad_type: 'contract', scope: 'global', price_per_day: prices.contract.global }
       ] as any[];
 
       await adPricingService.upsertPricingSettings(payload);
-      success('Preços dos anúncios atualizados com sucesso!');
+      success('Preços atualizados com sucesso!');
       await fetchPrices();
     } catch (err: any) {
       error('Falha ao salvar preços: ' + err.message);

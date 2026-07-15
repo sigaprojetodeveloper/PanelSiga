@@ -13,15 +13,19 @@ envContent.split('\n').forEach(line => {
 const supabase = createClient(env.SIGA_SUPABASE_URL, env.SIGA_SUPABASE_ANON_KEY);
 
 async function checkRLS() {
-  const tables = ['users', 'banners', 'story_channels', 'reports'];
-  for (const table of tables) {
-    const { data, error } = await supabase.from(table).select('*').limit(1);
-    if (error) {
-      console.log(`Table ${table} failed:`, error.message);
-    } else {
-      console.log(`Table ${table} succeeded: retrieved ${data.length} rows`);
-    }
+  const { data, error } = await supabase.from('ad_pricing').insert({
+    ad_type: 'contract',
+    scope: 'global',
+    price_per_day: 200
+  }).select();
+  if (error) {
+    console.log('Insert contract failed:', error.message);
+  } else {
+    console.log('Insert contract succeeded:', data);
+    // Cleanup if succeeded
+    await supabase.from('ad_pricing').delete().eq('ad_type', 'contract');
   }
 }
 
 checkRLS();
+
