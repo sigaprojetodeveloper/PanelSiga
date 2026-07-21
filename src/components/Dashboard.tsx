@@ -758,11 +758,11 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [isAdminPasswordModalOpen, setIsAdminPasswordModalOpen] = useState(false);
   const [selectedAdminId, setSelectedAdminId] = useState<string | null>(null);
   const [selectedAdminUsername, setSelectedAdminUsername] = useState<string>('');
-  
+
   const [newAdminUsername, setNewAdminUsername] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [newAdminConfirmPassword, setNewAdminConfirmPassword] = useState('');
-  
+
   const [editAdminPassword, setEditAdminPassword] = useState('');
   const [editAdminConfirmPassword, setEditAdminConfirmPassword] = useState('');
 
@@ -1791,7 +1791,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     const { data: activeBanners, error: queryError } = await supabase
       .from('banners')
       .select('*')
-      .in('status', ['active', 'scheduled', 'awaiting_payment'])
+      .in('status', ['active', 'scheduled', 'awaiting_payment', 'pending'])
       .lte('initialization_date', endStr)
       .gte('expiration_date', startStr);
 
@@ -3294,6 +3294,15 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                           onChange={(e) => adPricingHook.updatePrice('banner', 'city', parseFloat(e.target.value) || 0)}
                         />
                       </div>
+                      <div className="form-group">
+                        <label>Prazo para Pagamento (dias)</label>
+                        <input
+                          type="number"
+                          className="input-field"
+                          value={adPricingHook.prices.banner.payment_term_days}
+                          onChange={(e) => adPricingHook.updatePrice('banner', 'payment_term_days' as any, parseInt(e.target.value) || 0)}
+                        />
+                      </div>
                     </div>
                   )}
 
@@ -3303,7 +3312,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     onClick={adPricingHook.savePrices}
                     disabled={adPricingHook.saving || adPricingHook.loading}
                   >
-                    {adPricingHook.saving ? 'Salvando...' : 'Salvar Preços'}
+                    {adPricingHook.saving ? 'Salvando...' : 'Salvar Alterações'}
                   </button>
                 </div>
               )}
@@ -3347,6 +3356,15 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                           onChange={(e) => adPricingHook.updatePrice('story', 'city', parseFloat(e.target.value) || 0)}
                         />
                       </div>
+                      <div className="form-group">
+                        <label>Prazo para Pagamento (dias)</label>
+                        <input
+                          type="number"
+                          className="input-field"
+                          value={adPricingHook.prices.story.payment_term_days}
+                          onChange={(e) => adPricingHook.updatePrice('story', 'payment_term_days' as any, parseInt(e.target.value) || 0)}
+                        />
+                      </div>
                     </div>
                   )}
 
@@ -3356,7 +3374,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     onClick={adPricingHook.savePrices}
                     disabled={adPricingHook.saving || adPricingHook.loading}
                   >
-                    {adPricingHook.saving ? 'Salvando...' : 'Salvar Preços'}
+                    {adPricingHook.saving ? 'Salvando...' : 'Salvar Alterações'}
                   </button>
                 </div>
               )}
@@ -6321,7 +6339,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               <X size={20} />
             </button>
             <h3 className="modal-title">Novo Administrador</h3>
-            
+
             <form onSubmit={handleCreateAdminSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
               <div className="form-group">
                 <label htmlFor="admin_username">Usuário</label>

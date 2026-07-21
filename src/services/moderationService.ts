@@ -44,8 +44,24 @@ export const moderationService = {
     const { type, id, userId, adName, totalPrice } = params;
     const table = type === 'banner' ? 'banners' : 'story_channels';
 
-    // Prazo limite para pagamento de 7 dias
-    const paymentLimitDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    // Obter prazo de pagamento configurado na tabela ad_pricing
+    let daysToPay = 7;
+    try {
+      const { data: pricing } = await (supabase
+        .from('ad_pricing') as any)
+        .select('payment_term_days')
+        .eq('ad_type', type)
+        .limit(1)
+        .maybeSingle();
+
+      if (pricing && pricing.payment_term_days !== null) {
+        daysToPay = Number(pricing.payment_term_days);
+      }
+    } catch (err) {
+      console.warn('[moderationService] Erro ao obter prazo de pagamento, usando fallback de 7 dias:', err);
+    }
+
+    const paymentLimitDate = new Date(Date.now() + daysToPay * 24 * 60 * 60 * 1000).toISOString();
 
     const updates: any = {
       status: 'awaiting_payment',

@@ -218,6 +218,7 @@ export interface Database {
           ad_type: 'banner' | 'story' | 'contract';
           scope: 'global' | 'national' | 'state' | 'city';
           price_per_day: number;
+          payment_term_days: number;
           created_at: string;
           updated_at: string;
         };
