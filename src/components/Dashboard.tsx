@@ -3991,25 +3991,23 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                         <th>Solicitante</th>
                         <th>Abrangência</th>
                         <th>Vigência</th>
-                        <th>Duração (Dias)</th>
-                        <th>Preço Calculado</th>
                         <th style={{ textAlign: 'right' }}>Ações</th>
                       </tr>
                     </thead>
                     <tbody>
                       {moderationHook.loading ? (
                         <tr>
-                          <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                          <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                             Carregando solicitações...
                           </td>
                         </tr>
                       ) : totalModerationItems === 0 ? (
                         <tr>
-                          <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                          <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                             Nenhuma solicitação {
                               moderationHook.statusFilter === 'pending' ? 'pendente' :
-                              moderationHook.statusFilter === 'accepted' ? 'aceita' :
-                              'recusada'
+                                moderationHook.statusFilter === 'accepted' ? 'aceita' :
+                                  'recusada'
                             } encontrada.
                           </td>
                         </tr>
@@ -4022,11 +4020,10 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
                           // Date & price calculations
                           const { start, end } = getAdDates(item, isBanner ? 'banner' : 'story');
-                          const days = calculateDaysDifference(start, end);
-                          const itemScope = isBanner ? item.scope : (item.story_channels?.scope || item.scope);
-                          const pricePerDay = getScopePrice(isBanner ? 'banner' : 'story', itemScope);
-                          const storiesCount = !isBanner ? (item.story_items?.length || 0) : 1;
-                          const totalPrice = days * pricePerDay * (storiesCount || 1);
+                          const itemScope = isBanner ? item.scope : item.story_channels?.scope;
+                          const itemCountry = isBanner ? item.country : item.story_channels?.country;
+                          const itemState = isBanner ? item.state : item.story_channels?.state;
+                          const itemCity = isBanner ? item.city : item.story_channels?.city;
 
                           return (
                             <tr key={`${item._type}-${item.id}`}>
@@ -4073,11 +4070,11 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                 </div>
                               </td>
                               <td>
-                                <span style={{ textTransform: 'capitalize' }}>
+                                <span>
                                   {itemScope === 'global' ? 'Global' :
-                                    itemScope === 'national' ? `Nacional (${item.country || item.story_channels?.country || 'Brasil'})` :
-                                      itemScope === 'state' ? `Estadual (${item.state || item.story_channels?.state || ''})` :
-                                        `Municipal (${item.city || item.story_channels?.city || ''})`}
+                                    itemScope === 'national' ? `País: ${itemCountry || 'Brasil'}` :
+                                      itemScope === 'state' ? `Estado: ${itemState || ''}` :
+                                        `Cidade: ${itemCity || ''}${itemState ? ` / ${itemState}` : ''}`}
                                 </span>
                               </td>
                               <td>
@@ -4085,21 +4082,12 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                   {start ? new Date(start).toLocaleDateString('pt-BR') : '-'} até {end ? new Date(end).toLocaleDateString('pt-BR') : '-'}
                                 </span>
                               </td>
-                              <td>{days}</td>
-                              <td>
-                                <span style={{ fontWeight: 600, color: 'var(--primary)' }}>
-                                  R$ {totalPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </span>
-                                <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)' }}>
-                                  R$ {pricePerDay.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / dia
-                                </span>
-                              </td>
                               <td style={{ textAlign: 'right' }}>
                                 <button
                                   className="btn btn-secondary btn-sm"
                                   onClick={() => handleOpenModerationDetails(item, isBanner ? 'banner' : 'story')}
                                 >
-                                  Analisar
+                                  {item.status === 'pending' ? 'Analisar' : 'Detalhes'}
                                 </button>
                               </td>
                             </tr>
@@ -5944,7 +5932,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       )}
 
       {confirmModal.isOpen && (
-        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}>
+        <div className="modal-overlay" style={{ zIndex: 1300 }} onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}>
           <div className="modal-content" style={{ maxWidth: '400px' }} onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}>
               <X size={20} />
@@ -6212,17 +6200,18 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div className="modal-field">
                     <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Abrangência</span>
-                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)', textTransform: 'capitalize' }}>
+                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>
                       {(() => {
-                        const itemScope = selectedModerationItem.story_channels?.scope || selectedModerationItem.scope || 'national';
-                        const itemCountry = selectedModerationItem.story_channels?.country || selectedModerationItem.country || 'Brasil';
-                        const itemState = selectedModerationItem.story_channels?.state || selectedModerationItem.state || '';
-                        const itemCity = selectedModerationItem.story_channels?.city || selectedModerationItem.city || '';
+                        const isBanner = selectedModerationType === 'banner';
+                        const itemScope = isBanner ? selectedModerationItem.scope : selectedModerationItem.story_channels?.scope;
+                        const itemCountry = isBanner ? selectedModerationItem.country : selectedModerationItem.story_channels?.country;
+                        const itemState = isBanner ? selectedModerationItem.state : selectedModerationItem.story_channels?.state;
+                        const itemCity = isBanner ? selectedModerationItem.city : selectedModerationItem.story_channels?.city;
 
                         return itemScope === 'global' ? 'Global' :
-                          itemScope === 'national' ? `Nacional (${itemCountry})` :
-                            itemScope === 'state' ? `Estadual (${itemState})` :
-                              `Municipal (${itemCity})`;
+                          itemScope === 'national' ? `País: ${itemCountry || 'Brasil'}` :
+                            itemScope === 'state' ? `Estado: ${itemState || ''}` :
+                              `Cidade: ${itemCity || ''}${itemState ? ` / ${itemState}` : ''}`;
                       })()}
                     </span>
                   </div>
@@ -6257,7 +6246,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                         }
                         const { start, end } = getAdDates(selectedModerationItem, selectedModerationType);
                         const days = calculateDaysDifference(start, end);
-                        const itemScope = selectedModerationItem.story_channels?.scope || selectedModerationItem.scope || 'national';
+                        const isBanner = selectedModerationType === 'banner';
+                        const itemScope = isBanner ? selectedModerationItem.scope : selectedModerationItem.story_channels?.scope;
                         const pricePerDay = getScopePrice(selectedModerationType, itemScope);
                         const totalPrice = days * pricePerDay;
                         return `R$ ${totalPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -6293,10 +6283,10 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: '14px' }}>
                     Solicitação Aprovada ✅ ({
                       selectedModerationItem.status === 'awaiting_payment' ? 'Aguardando pagamento' :
-                      selectedModerationItem.status === 'scheduled' ? 'Agendado' :
-                      selectedModerationItem.status === 'active' ? 'Ativo' :
-                      selectedModerationItem.status === 'expired' ? 'Expirado' :
-                      selectedModerationItem.status
+                        selectedModerationItem.status === 'scheduled' ? 'Agendado' :
+                          selectedModerationItem.status === 'active' ? 'Ativo' :
+                            selectedModerationItem.status === 'expired' ? 'Expirado' :
+                              selectedModerationItem.status
                     })
                   </span>
                 </div>
@@ -6328,7 +6318,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     onClick={() => {
                       const { start, end } = getAdDates(selectedModerationItem, selectedModerationType);
                       const days = calculateDaysDifference(start, end);
-                      const itemScope = selectedModerationItem.story_channels?.scope || selectedModerationItem.scope || 'national';
+                      const isBanner = selectedModerationType === 'banner';
+                      const itemScope = isBanner ? selectedModerationItem.scope : selectedModerationItem.story_channels?.scope;
                       const pricePerDay = getScopePrice(selectedModerationType, itemScope);
                       const calculatedTotal = days * pricePerDay;
                       const finalTotalPrice = Number(selectedModerationItem.total_price) || calculatedTotal;

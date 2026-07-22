@@ -38,6 +38,10 @@ export const moderationService = {
           name,
           avatar_url,
           user_id,
+          scope,
+          country,
+          state,
+          city,
           users (
             name,
             email
