@@ -154,8 +154,8 @@ const getAdDates = (item: any, type: 'banner' | 'story') => {
     };
   } else {
     return {
-      start: item.data_inicializacao,
-      end: item.data_expiracao
+      start: item.initialization_date || item.data_inicializacao,
+      end: item.expiration_date || item.data_expiracao
     };
   }
 };
@@ -710,10 +710,38 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const adminUsersHook = useAdminUsers();
 
   // Moderation state
-  const [adTypeFilter, setAdTypeFilter] = useState<'banner' | 'story'>('banner');
+  const [adTypeFilter, setAdTypeFilter] = useState<'banner' | 'story' | 'all'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
   const [moderationModalOpen, setModerationModalOpen] = useState(false);
   const [selectedModerationItem, setSelectedModerationItem] = useState<any | null>(null);
   const [selectedModerationType, setSelectedModerationType] = useState<'banner' | 'story'>('banner');
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [adTypeFilter, moderationHook.statusFilter]);
+
+  const getFilteredModerationItems = () => {
+    const banners = (moderationHook.pendingBanners || []).map((b: any) => ({ ...b, _type: 'banner' as const }));
+    const stories = (moderationHook.pendingStories || []).map((s: any) => ({ ...s, _type: 'story' as const }));
+
+    let combined = [];
+    if (adTypeFilter === 'banner') {
+      combined = banners;
+    } else if (adTypeFilter === 'story') {
+      combined = stories;
+    } else {
+      combined = [...banners, ...stories];
+    }
+
+    return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  };
+
+  const filteredModerationItems = getFilteredModerationItems();
+  const moderationItemsPerPage = 10;
+  const totalModerationItems = filteredModerationItems.length;
+  const totalModerationPages = Math.ceil(totalModerationItems / moderationItemsPerPage);
+  const startModerationIndex = (currentPage - 1) * moderationItemsPerPage;
+  const paginatedModerationItems = filteredModerationItems.slice(startModerationIndex, startModerationIndex + moderationItemsPerPage);
 
   // Rejection modal state
   const [rejectionReasonModalOpen, setRejectionReasonModalOpen] = useState(false);
@@ -1425,7 +1453,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const totalUsersCount = userHook.totalCount || 0;
   const pendingReportsCount = reportHook.reports.filter(r => r.status === 'new').length;
   const selectedChannel = storyHook.channels.find((c: any) => c.id === storyHook.selectedChannelId);
-  const pendingRequestsCount = (moderationHook.pendingBanners || []).length + (moderationHook.pendingStories || []).length;
+  const pendingRequestsCount = moderationHook.pendingCount;
 
   const handleEditUserClick = (u: any) => {
     setEditUserId(u.id);
@@ -2311,9 +2339,9 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           >
             <Bell size={18} />
             Solicitações
-            {(moderationHook.pendingBanners.length + moderationHook.pendingStories.length) > 0 && (
+            {moderationHook.pendingCount > 0 && (
               <span className="badge badge-danger" style={{ marginLeft: 'auto', padding: '2px 6px', fontSize: '10px' }}>
-                {moderationHook.pendingBanners.length + moderationHook.pendingStories.length}
+                {moderationHook.pendingCount}
               </span>
             )}
           </a>
@@ -3900,6 +3928,12 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     <label>Tipo de Solicitação</label>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button
+                        className={`btn ${adTypeFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setAdTypeFilter('all')}
+                      >
+                        Todos
+                      </button>
+                      <button
                         className={`btn ${adTypeFilter === 'banner' ? 'btn-primary' : 'btn-secondary'}`}
                         onClick={() => setAdTypeFilter('banner')}
                       >
@@ -3910,6 +3944,30 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                         onClick={() => setAdTypeFilter('story')}
                       >
                         Canais de Stories
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="filter-control">
+                    <label>Status</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        className={`btn ${moderationHook.statusFilter === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => moderationHook.setStatusFilter('pending')}
+                      >
+                        Pendentes
+                      </button>
+                      <button
+                        className={`btn ${moderationHook.statusFilter === 'accepted' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => moderationHook.setStatusFilter('accepted')}
+                      >
+                        Aceitas
+                      </button>
+                      <button
+                        className={`btn ${moderationHook.statusFilter === 'rejected' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => moderationHook.setStatusFilter('rejected')}
+                      >
+                        Recusadas
                       </button>
                     </div>
                   </div>
@@ -3942,30 +4000,36 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       {moderationHook.loading ? (
                         <tr>
                           <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
-                            Carregando solicitações pendentes...
+                            Carregando solicitações...
                           </td>
                         </tr>
-                      ) : (adTypeFilter === 'banner' ? moderationHook.pendingBanners : moderationHook.pendingStories).length === 0 ? (
+                      ) : totalModerationItems === 0 ? (
                         <tr>
                           <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
-                            Nenhuma solicitação pendente para este tipo.
+                            Nenhuma solicitação {
+                              moderationHook.statusFilter === 'pending' ? 'pendente' :
+                              moderationHook.statusFilter === 'accepted' ? 'aceita' :
+                              'recusada'
+                            } encontrada.
                           </td>
                         </tr>
                       ) : (
-                        (adTypeFilter === 'banner' ? moderationHook.pendingBanners : moderationHook.pendingStories).map((item) => {
-                          const name = adTypeFilter === 'banner' ? item.title || 'Sem título' : item.name || 'Sem nome';
-                          const requesterName = item.users?.name || 'Não informado';
-                          const requesterEmail = item.users?.email || '';
+                        paginatedModerationItems.map((item) => {
+                          const isBanner = item._type === 'banner';
+                          const name = isBanner ? item.title || 'Sem título' : (item.story_channels?.name || item.name || 'Sem nome');
+                          const requesterName = isBanner ? (item.users?.name || 'Não informado') : (item.story_channels?.users?.name || item.users?.name || 'Não informado');
+                          const requesterEmail = isBanner ? (item.users?.email || '') : (item.story_channels?.users?.email || item.users?.email || '');
 
                           // Date & price calculations
-                          const { start, end } = getAdDates(item, adTypeFilter);
+                          const { start, end } = getAdDates(item, isBanner ? 'banner' : 'story');
                           const days = calculateDaysDifference(start, end);
-                          const pricePerDay = getScopePrice(adTypeFilter, item.scope);
-                          const storiesCount = adTypeFilter === 'story' ? (item.story_items?.length || 0) : 1;
-                          const totalPrice = days * pricePerDay * storiesCount;
+                          const itemScope = isBanner ? item.scope : (item.story_channels?.scope || item.scope);
+                          const pricePerDay = getScopePrice(isBanner ? 'banner' : 'story', itemScope);
+                          const storiesCount = !isBanner ? (item.story_items?.length || 0) : 1;
+                          const totalPrice = days * pricePerDay * (storiesCount || 1);
 
                           return (
-                            <tr key={item.id}>
+                            <tr key={`${item._type}-${item.id}`}>
                               <td>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                   <div style={{
@@ -3979,9 +4043,9 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                     alignItems: 'center',
                                     justifyContent: 'center'
                                   }}>
-                                    {(adTypeFilter === 'banner' ? item.image_url : item.avatar_url) ? (
+                                    {(isBanner ? item.image_url : (item.story_channels?.avatar_url || item.avatar_url)) ? (
                                       <img
-                                        src={adTypeFilter === 'banner' ? item.image_url : item.avatar_url}
+                                        src={isBanner ? item.image_url : (item.story_channels?.avatar_url || item.avatar_url)}
                                         alt={name}
                                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                       />
@@ -3991,7 +4055,10 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                                   </div>
                                   <div>
                                     <span style={{ fontWeight: 600 }}>{name}</span>
-                                    {adTypeFilter === 'banner' && item.subtitle && (
+                                    <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                                      {isBanner ? 'Banner' : 'Story'}
+                                    </span>
+                                    {isBanner && item.subtitle && (
                                       <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)' }}>{item.subtitle}</span>
                                     )}
                                   </div>
@@ -4007,10 +4074,10 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                               </td>
                               <td>
                                 <span style={{ textTransform: 'capitalize' }}>
-                                  {item.scope === 'global' ? 'Global' :
-                                    item.scope === 'national' ? `Nacional (${item.country || 'Brasil'})` :
-                                      item.scope === 'state' ? `Estadual (${item.state || ''})` :
-                                        `Municipal (${item.city || ''})`}
+                                  {itemScope === 'global' ? 'Global' :
+                                    itemScope === 'national' ? `Nacional (${item.country || item.story_channels?.country || 'Brasil'})` :
+                                      itemScope === 'state' ? `Estadual (${item.state || item.story_channels?.state || ''})` :
+                                        `Municipal (${item.city || item.story_channels?.city || ''})`}
                                 </span>
                               </td>
                               <td>
@@ -4030,7 +4097,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                               <td style={{ textAlign: 'right' }}>
                                 <button
                                   className="btn btn-secondary btn-sm"
-                                  onClick={() => handleOpenModerationDetails(item, adTypeFilter)}
+                                  onClick={() => handleOpenModerationDetails(item, isBanner ? 'banner' : 'story')}
                                 >
                                   Analisar
                                 </button>
@@ -4043,6 +4110,41 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   </table>
                 </div>
               </div>
+
+              {/* Pagination Controls */}
+              {totalModerationPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', padding: '0 8px' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                    Mostrando {startModerationIndex + 1} a {Math.min(startModerationIndex + moderationItemsPerPage, totalModerationItems)} de {totalModerationItems} solicitações
+                  </span>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Anterior
+                    </button>
+                    {Array.from({ length: totalModerationPages }, (_, i) => i + 1).map(page => (
+                      <button
+                        key={page}
+                        className={`btn btn-sm ${currentPage === page ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ minWidth: '32px', padding: '4px 8px' }}
+                        onClick={() => setCurrentPage(page)}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalModerationPages))}
+                      disabled={currentPage === totalModerationPages}
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -6031,48 +6133,46 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     {/* Story Channel Avatar and details */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-light)' }}>
                       <div style={{ width: '50px', height: '50px', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#ddd', display: 'flex', alignItems: 'center', justifyItems: 'center' }}>
-                        {selectedModerationItem.avatar_url ? (
-                          <img src={selectedModerationItem.avatar_url} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        {(selectedModerationItem.story_channels?.avatar_url || selectedModerationItem.avatar_url) ? (
+                          <img src={selectedModerationItem.story_channels?.avatar_url || selectedModerationItem.avatar_url} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (
-                          <span style={{ margin: 'auto', fontWeight: 600 }}>{selectedModerationItem.name ? selectedModerationItem.name[0] : '?'}</span>
+                          <span style={{ margin: 'auto', fontWeight: 600 }}>{(selectedModerationItem.story_channels?.name || selectedModerationItem.name || '?')[0]}</span>
                         )}
                       </div>
                       <div>
-                        <span style={{ fontWeight: 600, display: 'block' }}>{selectedModerationItem.name}</span>
+                        <span style={{ fontWeight: 600, display: 'block' }}>{selectedModerationItem.story_channels?.name || selectedModerationItem.name}</span>
                         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Canal de Stories</span>
                       </div>
                     </div>
 
-                    {/* Stories in this channel */}
+                    {/* Mídia do Story Item (ou lista se houver) */}
                     <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
-                      Stories Publicados ({selectedModerationItem.story_items?.length || 0})
+                      Mídia da Publicação
                     </span>
-                    {(!selectedModerationItem.story_items || selectedModerationItem.story_items.length === 0) ? (
-                      <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Nenhum story enviado. Canal limpo.</p>
-                    ) : (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px', maxHeight: '250px', overflowY: 'auto' }}>
-                        {selectedModerationItem.story_items.map((story: any) => (
-                          <div
-                            key={story.id}
-                            style={{
-                              border: '1px solid var(--border-light)',
-                              borderRadius: 'var(--radius-sm)',
-                              overflow: 'hidden',
-                              backgroundColor: '#000',
-                              aspectRatio: '9/16',
-                              position: 'relative',
-                              cursor: 'pointer'
-                            }}
-                            onClick={() => setPreviewMedia({ url: story.media_url, type: story.media_type })}
-                          >
-                            {story.media_type === 'image' ? (
-                              <img src={story.media_url} alt="Story" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : (
-                              <video src={story.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            )}
-                          </div>
-                        ))}
+                    {selectedModerationItem.media_url ? (
+                      <div
+                        style={{
+                          border: '1px solid var(--border-light)',
+                          borderRadius: 'var(--radius-sm)',
+                          overflow: 'hidden',
+                          backgroundColor: '#000',
+                          aspectRatio: '9/16',
+                          maxHeight: '300px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => setPreviewMedia({ url: selectedModerationItem.media_url, type: selectedModerationItem.media_type || 'image' })}
+                      >
+                        {selectedModerationItem.media_type === 'video' ? (
+                          <video src={selectedModerationItem.media_url} controls style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                        ) : (
+                          <img src={selectedModerationItem.media_url} alt="Story Media" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                        )}
                       </div>
+                    ) : (
+                      <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Sem mídia anexada.</p>
                     )}
                   </div>
                 )}
@@ -6083,11 +6183,11 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div className="modal-field">
                     <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Tipo</span>
-                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{selectedModerationType === 'banner' ? 'Banner Carrossel' : 'Canal de Stories'}</span>
+                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{selectedModerationType === 'banner' ? 'Banner Carrossel' : 'Story Item'}</span>
                   </div>
                   <div className="modal-field">
                     <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Nome/Título</span>
-                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{selectedModerationType === 'banner' ? selectedModerationItem.title || 'Sem título' : selectedModerationItem.name}</span>
+                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{selectedModerationType === 'banner' ? selectedModerationItem.title || 'Sem título' : (selectedModerationItem.story_channels?.name || selectedModerationItem.name)}</span>
                   </div>
                 </div>
 
@@ -6101,11 +6201,11 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div className="modal-field">
                     <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Solicitante</span>
-                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{selectedModerationItem.users?.name || 'Não informado'}</span>
+                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{selectedModerationItem.story_channels?.users?.name || selectedModerationItem.users?.name || 'Não informado'}</span>
                   </div>
                   <div className="modal-field">
                     <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>E-mail do Solicitante</span>
-                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{selectedModerationItem.users?.email || 'Não informado'}</span>
+                    <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{selectedModerationItem.story_channels?.users?.email || selectedModerationItem.users?.email || 'Não informado'}</span>
                   </div>
                 </div>
 
@@ -6113,10 +6213,17 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                   <div className="modal-field">
                     <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Abrangência</span>
                     <span className="value" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)', textTransform: 'capitalize' }}>
-                      {selectedModerationItem.scope === 'global' ? 'Global' :
-                        selectedModerationItem.scope === 'national' ? `Nacional (${selectedModerationItem.country || 'Brasil'})` :
-                          selectedModerationItem.scope === 'state' ? `Estadual (${selectedModerationItem.state || ''})` :
-                            `Municipal (${selectedModerationItem.city || ''})`}
+                      {(() => {
+                        const itemScope = selectedModerationItem.story_channels?.scope || selectedModerationItem.scope || 'national';
+                        const itemCountry = selectedModerationItem.story_channels?.country || selectedModerationItem.country || 'Brasil';
+                        const itemState = selectedModerationItem.story_channels?.state || selectedModerationItem.state || '';
+                        const itemCity = selectedModerationItem.story_channels?.city || selectedModerationItem.city || '';
+
+                        return itemScope === 'global' ? 'Global' :
+                          itemScope === 'national' ? `Nacional (${itemCountry})` :
+                            itemScope === 'state' ? `Estadual (${itemState})` :
+                              `Municipal (${itemCity})`;
+                      })()}
                     </span>
                   </div>
                   <div className="modal-field">
@@ -6145,11 +6252,14 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     <span className="label" style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Preço Total Calculado</span>
                     <span className="value" style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '16px' }}>
                       {(() => {
+                        if (selectedModerationItem.total_price) {
+                          return `R$ ${Number(selectedModerationItem.total_price).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                        }
                         const { start, end } = getAdDates(selectedModerationItem, selectedModerationType);
                         const days = calculateDaysDifference(start, end);
-                        const pricePerDay = getScopePrice(selectedModerationType, selectedModerationItem.scope);
-                        const storiesCount = selectedModerationType === 'story' ? (selectedModerationItem.story_items?.length || 0) : 1;
-                        const totalPrice = days * pricePerDay * storiesCount;
+                        const itemScope = selectedModerationItem.story_channels?.scope || selectedModerationItem.scope || 'national';
+                        const pricePerDay = getScopePrice(selectedModerationType, itemScope);
+                        const totalPrice = days * pricePerDay;
                         return `R$ ${totalPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                       })()}
                     </span>
@@ -6169,7 +6279,28 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-light)', paddingTop: '20px' }}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'flex-end', borderTop: '1px solid var(--border-light)', paddingTop: '20px' }}>
+              {selectedModerationItem.status === 'rejected' && (
+                <div style={{ marginRight: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>
+                  <span style={{ color: 'var(--danger)', fontWeight: 600, fontSize: '14px' }}>Solicitação Recusada ⚠️</span>
+                  {selectedModerationItem.rejection_reason && (
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Motivo: &quot;{selectedModerationItem.rejection_reason}&quot;</span>
+                  )}
+                </div>
+              )}
+              {selectedModerationItem.status !== 'pending' && selectedModerationItem.status !== 'rejected' && (
+                <div style={{ marginRight: 'auto', textAlign: 'left' }}>
+                  <span style={{ color: 'var(--success)', fontWeight: 600, fontSize: '14px' }}>
+                    Solicitação Aprovada ✅ ({
+                      selectedModerationItem.status === 'awaiting_payment' ? 'Aguardando pagamento' :
+                      selectedModerationItem.status === 'scheduled' ? 'Agendado' :
+                      selectedModerationItem.status === 'active' ? 'Ativo' :
+                      selectedModerationItem.status === 'expired' ? 'Expirado' :
+                      selectedModerationItem.status
+                    })
+                  </span>
+                </div>
+              )}
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -6177,43 +6308,55 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               >
                 Fechar
               </button>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => {
-                  setRejectionOption('low_quality');
-                  setRejectionText('');
-                  setRejectionReasonModalOpen(true);
-                }}
-              >
-                Recusar Solicitação
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ backgroundColor: 'var(--success)', color: '#fff' }}
-                onClick={async () => {
-                  if (confirm('Deseja realmente aceitar esta solicitação?')) {
-                    const { start, end } = getAdDates(selectedModerationItem, selectedModerationType);
-                    const days = calculateDaysDifference(start, end);
-                    const pricePerDay = getScopePrice(selectedModerationType, selectedModerationItem.scope);
-                    const storiesCount = selectedModerationType === 'story' ? (selectedModerationItem.story_items?.length || 0) : 1;
-                    const totalPrice = days * pricePerDay * storiesCount;
+              {selectedModerationItem.status === 'pending' && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => {
+                      setRejectionOption('low_quality');
+                      setRejectionText('');
+                      setRejectionReasonModalOpen(true);
+                    }}
+                  >
+                    Recusar Solicitação
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ backgroundColor: 'var(--success)', color: '#fff' }}
+                    onClick={() => {
+                      const { start, end } = getAdDates(selectedModerationItem, selectedModerationType);
+                      const days = calculateDaysDifference(start, end);
+                      const itemScope = selectedModerationItem.story_channels?.scope || selectedModerationItem.scope || 'national';
+                      const pricePerDay = getScopePrice(selectedModerationType, itemScope);
+                      const calculatedTotal = days * pricePerDay;
+                      const finalTotalPrice = Number(selectedModerationItem.total_price) || calculatedTotal;
+                      const targetUserId = selectedModerationItem.story_channels?.user_id || selectedModerationItem.user_id;
+                      const adName = selectedModerationType === 'banner' ? selectedModerationItem.title || 'Sem título' : (selectedModerationItem.story_channels?.name || selectedModerationItem.name || 'Story');
 
-                    await moderationHook.acceptRequest({
-                      type: selectedModerationType,
-                      id: selectedModerationItem.id,
-                      userId: selectedModerationItem.user_id,
-                      adName: selectedModerationType === 'banner' ? selectedModerationItem.title || 'Sem título' : selectedModerationItem.name,
-                      totalPrice: totalPrice
-                    });
-                    setModerationModalOpen(false);
-                  }
-                }}
-                disabled={moderationHook.actionLoading === selectedModerationItem.id}
-              >
-                {moderationHook.actionLoading === selectedModerationItem.id ? 'Aprovando...' : 'Aceitar Solicitação'}
-              </button>
+                      setConfirmModal({
+                        isOpen: true,
+                        title: 'Aceitar Solicitação',
+                        message: 'Deseja realmente aceitar esta solicitação de publicação?',
+                        onConfirm: async () => {
+                          await moderationHook.acceptRequest({
+                            type: selectedModerationType,
+                            id: selectedModerationItem.id,
+                            userId: targetUserId,
+                            adName: adName,
+                            totalPrice: finalTotalPrice
+                          });
+                          setModerationModalOpen(false);
+                        }
+                      });
+                    }}
+                    disabled={moderationHook.actionLoading === selectedModerationItem.id}
+                  >
+                    {moderationHook.actionLoading === selectedModerationItem.id ? 'Aprovando...' : 'Aceitar Solicitação'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -6298,29 +6441,38 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               <button
                 type="button"
                 className="btn btn-danger"
-                onClick={async () => {
+                onClick={() => {
                   let reason = '';
                   if (rejectionOption === 'low_quality') reason = 'Imagem de baixa qualidade ou inapropriada';
                   else if (rejectionOption === 'errors_or_offensive') reason = 'Texto com erros ou ofensivo';
                   else if (rejectionOption === 'invalid_link') reason = 'Link inválido ou suspeito';
                   else {
                     if (!rejectionText.trim()) {
-                      alert('Por favor, especifique o motivo da recusa.');
+                      warning('Por favor, especifique o motivo da recusa.');
                       return;
                     }
                     reason = rejectionText.trim();
                   }
 
-                  await moderationHook.rejectRequest({
-                    type: selectedModerationType,
-                    id: selectedModerationItem.id,
-                    userId: selectedModerationItem.user_id,
-                    adName: selectedModerationType === 'banner' ? selectedModerationItem.title || 'Sem título' : selectedModerationItem.name,
-                    reason: reason
-                  });
+                  const targetUserId = selectedModerationItem.story_channels?.user_id || selectedModerationItem.user_id;
+                  const adName = selectedModerationType === 'banner' ? selectedModerationItem.title || 'Sem título' : (selectedModerationItem.story_channels?.name || selectedModerationItem.name || 'Story');
 
-                  setRejectionReasonModalOpen(false);
-                  setModerationModalOpen(false);
+                  setConfirmModal({
+                    isOpen: true,
+                    title: 'Recusar Solicitação',
+                    message: 'Deseja realmente recusar esta solicitação de publicação?',
+                    onConfirm: async () => {
+                      await moderationHook.rejectRequest({
+                        type: selectedModerationType,
+                        id: selectedModerationItem.id,
+                        userId: targetUserId,
+                        adName: adName,
+                        reason: reason
+                      });
+                      setRejectionReasonModalOpen(false);
+                      setModerationModalOpen(false);
+                    }
+                  });
                 }}
                 disabled={moderationHook.actionLoading === selectedModerationItem.id}
               >

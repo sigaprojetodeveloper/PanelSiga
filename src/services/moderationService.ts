@@ -6,29 +6,57 @@ type Banner = Database['public']['Tables']['banners']['Row'];
 type Channel = Database['public']['Tables']['story_channels']['Row'];
 
 export const moderationService = {
-  async getPendingBanners() {
-    const { data, error } = await (supabase
+  async getPendingBanners(statusGroup: 'pending' | 'accepted' | 'rejected' = 'pending') {
+    let query = supabase
       .from('banners')
-      .select('*, users(name, email)')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false }) as any);
+      .select('*, users(name, email)');
+
+    if (statusGroup === 'pending') {
+      query = query.eq('status', 'pending');
+    } else if (statusGroup === 'accepted') {
+      query = query.in('status', ['awaiting_payment', 'scheduled', 'active']);
+    } else if (statusGroup === 'rejected') {
+      query = query.eq('status', 'rejected');
+    }
+
+    const { data, error } = await (query.order('created_at', { ascending: false }) as any);
 
     if (error) {
-      console.error('[moderationService] Erro ao buscar banners pendentes:', error);
+      console.error(`[moderationService] Erro ao buscar banners (${statusGroup}):`, error);
       throw error;
     }
     return data || [];
   },
 
-  async getPendingStories() {
-    const { data, error } = await (supabase
-      .from('story_channels')
-      .select('*, users(name, email), story_items(*)')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false }) as any);
+  async getPendingStories(statusGroup: 'pending' | 'accepted' | 'rejected' = 'pending') {
+    let query = supabase
+      .from('story_items')
+      .select(`
+        *,
+        story_channels!inner (
+          id,
+          name,
+          avatar_url,
+          user_id,
+          users (
+            name,
+            email
+          )
+        )
+      `);
+
+    if (statusGroup === 'pending') {
+      query = query.eq('status', 'pending');
+    } else if (statusGroup === 'accepted') {
+      query = query.in('status', ['awaiting_payment', 'scheduled', 'active']);
+    } else if (statusGroup === 'rejected') {
+      query = query.eq('status', 'rejected');
+    }
+
+    const { data, error } = await (query.order('created_at', { ascending: false }) as any);
 
     if (error) {
-      console.error('[moderationService] Erro ao buscar stories pendentes:', error);
+      console.error(`[moderationService] Erro ao buscar stories (${statusGroup}):`, error);
       throw error;
     }
     return data || [];
@@ -42,7 +70,7 @@ export const moderationService = {
     totalPrice?: number;
   }) {
     const { type, id, userId, adName, totalPrice } = params;
-    const table = type === 'banner' ? 'banners' : 'story_channels';
+    const table = type === 'banner' ? 'banners' : 'story_items';
 
     // Obter prazo de pagamento configurado na tabela ad_pricing
     let daysToPay = 7;
@@ -66,7 +94,6 @@ export const moderationService = {
     const updates: any = {
       status: 'awaiting_payment',
       payment_limit_date: paymentLimitDate,
-      updated_at: new Date().toISOString(),
     };
 
     if (totalPrice !== undefined) {
@@ -85,7 +112,7 @@ export const moderationService = {
     }
 
     // Enviar notificação
-    const displayType = type === 'banner' ? 'Banner' : 'Canal';
+    const displayType = type === 'banner' ? 'Banner' : 'Story';
     await notificationsService.sendNotification({
       userId,
       title: 'Publicação Aprovada! 🚀',
@@ -105,13 +132,12 @@ export const moderationService = {
     reason: string;
   }) {
     const { type, id, userId, adName, reason } = params;
-    const table = type === 'banner' ? 'banners' : 'story_channels';
+    const table = type === 'banner' ? 'banners' : 'story_items';
 
     const { data, error } = await (supabase.from(table) as any)
       .update({
         status: 'rejected',
         rejection_reason: reason,
-        updated_at: new Date().toISOString(),
       })
       .eq('id', id)
       .select()
@@ -123,7 +149,7 @@ export const moderationService = {
     }
 
     // Enviar notificação
-    const displayType = type === 'banner' ? 'Banner' : 'Canal';
+    const displayType = type === 'banner' ? 'Banner' : 'Story';
     await notificationsService.sendNotification({
       userId,
       title: 'Publicação Recusada ⚠️',
