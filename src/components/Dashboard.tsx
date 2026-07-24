@@ -3416,7 +3416,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontWeight: 600, fontSize: '14px' }}>Exibir na tela</span>
                         <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                          Caso esteja ativo, ao chegar uma solicitação de banner ou story, exibe a tela de "Análise de Solicitação de Publicidade".
+                          Caso esteja ativo, ao chegar uma solicitação de banner ou story, exibe a tela de &ldquo;Análise de Solicitação de Publicidade&ldquo;.
                         </span>
                       </div>
                     </label>
