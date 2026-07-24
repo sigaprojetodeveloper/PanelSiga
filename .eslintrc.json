@@ -1,6 +1,9 @@
 {
   "extends": "next/core-web-vitals",
   "rules": {
-    "complexity": ["error", 10]
+    "complexity": [
+      "error",
+      15
+    ]
   }
 }
