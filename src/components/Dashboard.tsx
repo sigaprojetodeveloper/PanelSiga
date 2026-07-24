@@ -1,7 +1,7 @@
-/* eslint-disable complexity */
+/* eslint-disable complexity, @next/next/no-img-element */
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useUsers } from '../hooks/useUsers';
 import { useReports } from '../hooks/useReports';
 import { useStories } from '../hooks/useStories';
@@ -954,7 +954,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [templateEs, setTemplateEs] = useState('');
   const [selectedLangTab, setSelectedLangTab] = useState<'pt' | 'en' | 'es'>('pt');
 
-  const fetchContractTemplate = async () => {
+  const fetchContractTemplate = useCallback(async () => {
     try {
       const { data, error: tErr } = await (supabase
         .from('contract_templates') as any)
@@ -971,7 +971,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     } catch (err) {
       console.error('Erro ao buscar template de contrato do banco:', err);
     }
-  };
+  }, []);
 
   const handleLangTabChange = (newLang: 'pt' | 'en' | 'es') => {
     if (selectedLangTab === 'pt') setTemplatePt(tempTemplateText);
@@ -1469,7 +1469,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     fetchActiveBannersCount();
   }, [bannersHook.banners]);
 
-  const fetchClosedContracts = async () => {
+  const fetchClosedContracts = useCallback(async () => {
     setContractsLoading(true);
     try {
       const { data: proposalsData, error: pErr } = await (supabase
@@ -1541,14 +1541,14 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     } finally {
       setContractsLoading(false);
     }
-  };
+  }, [contractValue]);
 
   useEffect(() => {
     if (activeTab === 'settings' && settingsSubTab === 'contracts') {
       fetchClosedContracts();
       fetchContractTemplate();
     }
-  }, [activeTab, settingsSubTab, contractValue]);
+  }, [activeTab, settingsSubTab, fetchClosedContracts, fetchContractTemplate]);
 
   const handleSaveContractValue = async (contract: any) => {
     const val = contractPricesInput[contract.id];

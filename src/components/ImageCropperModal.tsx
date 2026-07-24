@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import React, { useState, useEffect, useRef } from 'react';
 import { X, ZoomIn, ZoomOut, Check } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
