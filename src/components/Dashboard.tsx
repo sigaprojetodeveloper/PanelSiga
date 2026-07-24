@@ -700,21 +700,149 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'stories' | 'reports' | 'settings' | 'banners' | 'moderation' | 'financial'>('overview');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-  // Custom Hooks
+  // Custom Hooks & Notification Settings
   const userHook = useUsers();
   const reportHook = useReports();
   const storyHook = useStories();
   const bannersHook = useBanners();
-  const moderationHook = useModeration();
   const adPricingHook = useAdPricing();
   const adminUsersHook = useAdminUsers();
 
-  // Moderation state
+  // Request Settings & Notification States
+  const [requestDisplayOnScreen, setRequestDisplayOnScreen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('siga_req_display_on_screen');
+      return saved !== 'false';
+    }
+    return true;
+  });
+
+  const [requestSoundAlert, setRequestSoundAlert] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('siga_req_sound_alert');
+      return saved !== 'false';
+    }
+    return true;
+  });
+
+  const [requestQueue, setRequestQueue] = useState<Array<{ type: 'banner' | 'story'; item: any }>>([]);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'default';
+  });
+
+  const requestDisplayOnScreenRef = React.useRef(requestDisplayOnScreen);
+  useEffect(() => {
+    requestDisplayOnScreenRef.current = requestDisplayOnScreen;
+  }, [requestDisplayOnScreen]);
+
+  const requestSoundAlertRef = React.useRef(requestSoundAlert);
+  useEffect(() => {
+    requestSoundAlertRef.current = requestSoundAlert;
+  }, [requestSoundAlert]);
+
+  const playSoundAlert = React.useCallback(() => {
+    try {
+      const audio = new Audio('/assets/sons/opening-bell.mp3');
+      audio.play().catch(err => {
+        console.warn('[AudioAlert] Erro na reprodução automática:', err);
+      });
+    } catch (err) {
+      console.warn('[AudioAlert] Erro ao instanciar áudio:', err);
+    }
+  }, []);
+
+  const triggerBrowserNotification = React.useCallback((title: string, body: string) => {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        const notif = new Notification(title, {
+          body,
+          icon: '/favicon.svg'
+        });
+        notif.onclick = () => {
+          window.focus();
+          setActiveTab('moderation');
+        };
+      } catch (err) {
+        console.warn('[BrowserNotification] Erro ao disparar notificação:', err);
+      }
+    }
+  }, []);
+
+  const requestNotificationPermission = React.useCallback(async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      const perm = await Notification.requestPermission();
+      setNotificationPermission(perm);
+      if (perm === 'granted') {
+        success('Permissão para notificações do navegador concedida!');
+      } else if (perm === 'denied') {
+        warning('Notificações do navegador bloqueadas.');
+      }
+    }
+  }, [success, warning]);
+
+  // Moderation state & Realtime Callback
   const [adTypeFilter, setAdTypeFilter] = useState<'banner' | 'story' | 'all'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [moderationModalOpen, setModerationModalOpen] = useState(false);
   const [selectedModerationItem, setSelectedModerationItem] = useState<any | null>(null);
   const [selectedModerationType, setSelectedModerationType] = useState<'banner' | 'story'>('banner');
+
+  const moderationModalOpenRef = React.useRef(moderationModalOpen);
+  useEffect(() => {
+    moderationModalOpenRef.current = moderationModalOpen;
+  }, [moderationModalOpen]);
+
+  const handleNewRequest = React.useCallback(({ type, item }: { type: 'banner' | 'story'; item: any }) => {
+    // 1. Sound Alert
+    if (requestSoundAlertRef.current) {
+      playSoundAlert();
+    }
+
+    // 2. Browser Notification
+    const labelType = type === 'banner' ? 'Banner' : 'Story';
+    const name = type === 'banner' ? (item.title || 'Sem título') : (item.story_channels?.name || item.name || 'Story');
+    triggerBrowserNotification(
+      'Nova Solicitação de Publicidade 🚀',
+      `Chegou um novo ${labelType}: "${name}". Clique para analisar.`
+    );
+
+    // 3. Screen Display & Modal Queue
+    if (requestDisplayOnScreenRef.current) {
+      if (moderationModalOpenRef.current) {
+        setRequestQueue(prev => [...prev, { type, item }]);
+      } else {
+        setSelectedModerationItem(item);
+        setSelectedModerationType(type);
+        setModerationModalOpen(true);
+      }
+    }
+  }, [playSoundAlert, triggerBrowserNotification]);
+
+  const moderationHook = useModeration({ onNewRequest: handleNewRequest });
+
+  const handleCloseModerationModal = React.useCallback(() => {
+    setRequestQueue(prevQueue => {
+      if (prevQueue.length > 0) {
+        const next = prevQueue[0];
+        const remaining = prevQueue.slice(1);
+        setTimeout(() => {
+          setSelectedModerationItem(next.item);
+          setSelectedModerationType(next.type);
+          setModerationModalOpen(true);
+        }, 0);
+        return remaining;
+      } else {
+        setTimeout(() => {
+          setModerationModalOpen(false);
+          setSelectedModerationItem(null);
+        }, 0);
+        return [];
+      }
+    });
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -749,7 +877,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [rejectionText, setRejectionText] = useState('');
 
   // Settings sub-tab state
-  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'banners' | 'stories' | 'contracts' | 'admins'>('general');
+  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'banners' | 'stories' | 'contracts' | 'admins' | 'requests'>('general');
 
   const currentUserEmail = adminUsername;
 
@@ -3254,7 +3382,87 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 >
                   Usuários Admin
                 </button>
+                <button
+                  type="button"
+                  className={`btn ${settingsSubTab === 'requests' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setSettingsSubTab('requests')}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  Solicitações
+                </button>
               </div>
+
+              {/* Sub-tab: Requests / Solicitações */}
+              {settingsSubTab === 'requests' && (
+                <div style={{ backgroundColor: 'var(--bg-card)', padding: '32px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', maxWidth: '600px' }}>
+                  <h3 style={{ fontSize: '20px', marginBottom: '8px' }}>Configurações de Solicitações</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '24px' }}>
+                    Defina as preferências de notificação e alertas automáticos quando novas solicitações de anúncios chegarem ao painel.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '24px' }}>
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        style={{ width: '18px', height: '18px', marginTop: '2px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                        checked={requestDisplayOnScreen}
+                        onChange={(e) => {
+                          const val = e.target.checked;
+                          setRequestDisplayOnScreen(val);
+                          localStorage.setItem('siga_req_display_on_screen', val ? 'true' : 'false');
+                          success(val ? 'Exibição em tela ativada.' : 'Exibição em tela desativada.');
+                        }}
+                      />
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontWeight: 600, fontSize: '14px' }}>Exibir na tela</span>
+                        <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                          Caso esteja ativo, ao chegar uma solicitação de banner ou story, exibe a tela de "Análise de Solicitação de Publicidade".
+                        </span>
+                      </div>
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        style={{ width: '18px', height: '18px', marginTop: '2px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                        checked={requestSoundAlert}
+                        onChange={(e) => {
+                          const val = e.target.checked;
+                          setRequestSoundAlert(val);
+                          localStorage.setItem('siga_req_sound_alert', val ? 'true' : 'false');
+                          success(val ? 'Alerta sonoro ativado.' : 'Alerta sonoro desativado.');
+                        }}
+                      />
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontWeight: 600, fontSize: '14px' }}>Alerta Sonoro</span>
+                        <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                          Caso esteja ativo, ao chegar uma solicitação de banner ou stories toca o efeito sonoro do sistema.
+                        </span>
+                      </div>
+                    </label>
+
+                    <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '16px', marginTop: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontWeight: 600, fontSize: '14px' }}>Notificações do Navegador</span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            Status da permissão: <strong>{notificationPermission === 'granted' ? 'Concedida ✅' : notificationPermission === 'denied' ? 'Bloqueada ❌' : 'Padrão / Não solicitada ⚠️'}</strong>
+                          </span>
+                        </div>
+                        {notificationPermission !== 'granted' && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={requestNotificationPermission}
+                          >
+                            Ativar Notificações Web
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Sub-tab: General */}
               {settingsSubTab === 'general' && (
@@ -3926,37 +4134,119 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 <div className="filters-group">
                   <div className="filter-control">
                     <label>Tipo de Solicitação</label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        className={`btn ${adTypeFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-                        onClick={() => setAdTypeFilter('all')}
-                      >
-                        Todos
-                      </button>
-                      <button
-                        className={`btn ${adTypeFilter === 'banner' ? 'btn-primary' : 'btn-secondary'}`}
-                        onClick={() => setAdTypeFilter('banner')}
-                      >
-                        Banners
-                      </button>
-                      <button
-                        className={`btn ${adTypeFilter === 'story' ? 'btn-primary' : 'btn-secondary'}`}
-                        onClick={() => setAdTypeFilter('story')}
-                      >
-                        Canais de Stories
-                      </button>
+                    <div style={{ display: 'flex', gap: '8px', paddingTop: '6px' }}>
+                      <div style={{ position: 'relative', display: 'inline-block' }}>
+                        {moderationHook.pendingCount > 0 && (
+                          <span style={{
+                            position: 'absolute',
+                            top: '-10px',
+                            right: '-6px',
+                            backgroundColor: 'var(--danger)',
+                            color: '#fff',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: '10px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                            zIndex: 2,
+                            pointerEvents: 'none'
+                          }}>
+                            {moderationHook.pendingCount}
+                          </span>
+                        )}
+                        <button
+                          className={`btn ${adTypeFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => setAdTypeFilter('all')}
+                        >
+                          Todos
+                        </button>
+                      </div>
+
+                      <div style={{ position: 'relative', display: 'inline-block' }}>
+                        {moderationHook.pendingBannersCount > 0 && (
+                          <span style={{
+                            position: 'absolute',
+                            top: '-10px',
+                            right: '-6px',
+                            backgroundColor: 'var(--danger)',
+                            color: '#fff',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: '10px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                            zIndex: 2,
+                            pointerEvents: 'none'
+                          }}>
+                            {moderationHook.pendingBannersCount}
+                          </span>
+                        )}
+                        <button
+                          className={`btn ${adTypeFilter === 'banner' ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => setAdTypeFilter('banner')}
+                        >
+                          Banners
+                        </button>
+                      </div>
+
+                      <div style={{ position: 'relative', display: 'inline-block' }}>
+                        {moderationHook.pendingStoriesCount > 0 && (
+                          <span style={{
+                            position: 'absolute',
+                            top: '-10px',
+                            right: '-6px',
+                            backgroundColor: 'var(--danger)',
+                            color: '#fff',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: '10px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                            zIndex: 2,
+                            pointerEvents: 'none'
+                          }}>
+                            {moderationHook.pendingStoriesCount}
+                          </span>
+                        )}
+                        <button
+                          className={`btn ${adTypeFilter === 'story' ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => setAdTypeFilter('story')}
+                        >
+                          Stories
+                        </button>
+                      </div>
                     </div>
                   </div>
 
                   <div className="filter-control">
                     <label>Status</label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        className={`btn ${moderationHook.statusFilter === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
-                        onClick={() => moderationHook.setStatusFilter('pending')}
-                      >
-                        Pendentes
-                      </button>
+                    <div style={{ display: 'flex', gap: '8px', paddingTop: '6px' }}>
+                      <div style={{ position: 'relative', display: 'inline-block' }}>
+                        {moderationHook.pendingCount > 0 && (
+                          <span style={{
+                            position: 'absolute',
+                            top: '-10px',
+                            right: '-6px',
+                            backgroundColor: 'var(--danger)',
+                            color: '#fff',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: '10px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                            zIndex: 2,
+                            pointerEvents: 'none'
+                          }}>
+                            {moderationHook.pendingCount}
+                          </span>
+                        )}
+                        <button
+                          className={`btn ${moderationHook.statusFilter === 'pending' ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => moderationHook.setStatusFilter('pending')}
+                        >
+                          Pendentes
+                        </button>
+                      </div>
                       <button
                         className={`btn ${moderationHook.statusFilter === 'accepted' ? 'btn-primary' : 'btn-secondary'}`}
                         onClick={() => moderationHook.setStatusFilter('accepted')}
@@ -6082,9 +6372,9 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
       {/* ================= MODAL: MODERATION DETAILS ================= */}
       {moderationModalOpen && selectedModerationItem && (
-        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={() => setModerationModalOpen(false)}>
+        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={handleCloseModerationModal}>
           <div className="modal-content" style={{ maxWidth: '850px', width: '95vw', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setModerationModalOpen(false)}>
+            <button className="modal-close" onClick={handleCloseModerationModal}>
               <X size={20} />
             </button>
             <h3 className="modal-title">Análise de Solicitação de Publicidade</h3>
@@ -6294,7 +6584,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => setModerationModalOpen(false)}
+                onClick={handleCloseModerationModal}
               >
                 Fechar
               </button>
@@ -6338,7 +6628,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                             adName: adName,
                             totalPrice: finalTotalPrice
                           });
-                          setModerationModalOpen(false);
+                          handleCloseModerationModal();
                         }
                       });
                     }}
@@ -6461,7 +6751,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                         reason: reason
                       });
                       setRejectionReasonModalOpen(false);
-                      setModerationModalOpen(false);
+                      handleCloseModerationModal();
                     }
                   });
                 }}
