@@ -3521,15 +3521,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                           onChange={(e) => adPricingHook.updatePrice('banner', 'state', parseFloat(e.target.value) || 0)}
                         />
                       </div>
-                      <div className="form-group">
-                        <label>Preço Municipal (R$ / dia)</label>
-                        <input
-                          type="number"
-                          className="input-field"
-                          value={adPricingHook.prices.banner.city}
-                          onChange={(e) => adPricingHook.updatePrice('banner', 'city', parseFloat(e.target.value) || 0)}
-                        />
-                      </div>
+
                       <div className="form-group">
                         <label>Prazo para Pagamento (dias)</label>
                         <input
