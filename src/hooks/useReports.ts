@@ -10,8 +10,10 @@ export function useReports(initialStatus?: Report['status'], initialTargetType?:
   const [reports, setReports] = useState<Report[]>([]);
   const [statusFilter, setStatusFilter] = useState<Report['status'] | undefined>(initialStatus);
   const [targetTypeFilter, setTargetTypeFilter] = useState<Report['target_type'] | undefined>(initialTargetType);
+  const [reasonFilter, setReasonFilter] = useState<string | undefined>(undefined);
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(20);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [errorState, setErrorState] = useState<Error | null>(null);
@@ -25,6 +27,8 @@ export function useReports(initialStatus?: Report['status'], initialTargetType?:
         pageSize,
         status: statusFilter,
         targetType: targetTypeFilter,
+        reason: reasonFilter,
+        search: searchQuery,
       });
       setReports(data || []);
       setTotalCount(totalCount);
@@ -33,7 +37,7 @@ export function useReports(initialStatus?: Report['status'], initialTargetType?:
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, statusFilter, targetTypeFilter]);
+  }, [page, pageSize, statusFilter, targetTypeFilter, reasonFilter, searchQuery]);
 
   useEffect(() => {
     fetchReports();
@@ -43,7 +47,7 @@ export function useReports(initialStatus?: Report['status'], initialTargetType?:
     try {
       await reportsService.updateReportStatus(reportId, status, notes);
       setReports((prev) =>
-        prev.map((rep) => (rep.id === reportId ? { ...rep, status, notes: notes || rep.notes } : rep))
+        prev.map((rep) => (rep.id === reportId ? { ...rep, status, notes: notes !== undefined ? notes : rep.notes } : rep))
       );
       success('Denúncia atualizada com sucesso!');
     } catch (err: any) {
@@ -52,17 +56,26 @@ export function useReports(initialStatus?: Report['status'], initialTargetType?:
     }
   };
 
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
   return {
     reports,
     totalCount,
+    totalPages,
     loading,
     error: errorState,
     page,
     setPage,
+    pageSize,
+    setPageSize,
     statusFilter,
     setStatusFilter,
     targetTypeFilter,
     setTargetTypeFilter,
+    reasonFilter,
+    setReasonFilter,
+    searchQuery,
+    setSearchQuery,
     updateReportStatus,
     refetch: fetchReports,
   };

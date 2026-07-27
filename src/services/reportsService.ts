@@ -9,8 +9,10 @@ export const reportsService = {
     pageSize: number;
     status?: Report['status'];
     targetType?: Report['target_type'];
+    reason?: string;
+    search?: string;
   }) {
-    const { page, pageSize, status, targetType } = params;
+    const { page, pageSize, status, targetType, reason, search } = params;
     const startRange = (page - 1) * pageSize;
     const endRange = startRange + pageSize - 1;
 
@@ -23,6 +25,13 @@ export const reportsService = {
     }
     if (targetType) {
       query = query.eq('target_type', targetType);
+    }
+    if (reason) {
+      query = query.eq('reason', reason);
+    }
+    if (search && search.trim()) {
+      const q = `%${search.trim()}%`;
+      query = query.or(`reason.ilike.${q},description.ilike.${q},target_id.ilike.${q}`);
     }
 
     query = query
