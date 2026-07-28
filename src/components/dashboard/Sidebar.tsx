@@ -11,12 +11,14 @@ import {
   Image as ImageIcon,
   Bell,
   Award,
+  Briefcase,
   X
 } from 'lucide-react';
 
 export type DashboardTab =
   | 'overview'
   | 'users'
+  | 'works'
   | 'stories'
   | 'reports'
   | 'settings'
@@ -65,6 +67,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <LayoutDashboard size={18} />
           Visão Geral
+        </a>
+        <a
+          onClick={() => {
+            setActiveTab('works');
+            setMobileSidebarOpen(false);
+          }}
+          className={`nav-item ${activeTab === 'works' ? 'active' : ''}`}
+        >
+          <Briefcase size={18} />
+          Obras
         </a>
         <a
           onClick={() => {

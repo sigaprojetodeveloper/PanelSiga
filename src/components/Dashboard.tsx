@@ -12,6 +12,7 @@ import { storiesService } from '../services/storiesService';
 import { notificationsService } from '../services/notificationsService';
 import { useToast } from '../hooks/useToast';
 import { useModeration } from '../hooks/useModeration';
+import { useWorksModeration } from '../hooks/useWorksModeration';
 import { useAdPricing } from '../hooks/useAdPricing';
 import { useAdminUsers } from '../hooks/useAdminUsers';
 import { Country, State, City } from 'country-state-city';
@@ -21,6 +22,7 @@ import { Sidebar } from './dashboard/Sidebar';
 import { Header } from './dashboard/Header';
 import { OverviewTab } from './dashboard/tabs/OverviewTab';
 import { UsersTab } from './dashboard/tabs/UsersTab';
+import { WorksModerationTab } from './dashboard/tabs/WorksModerationTab';
 import { StoriesTab } from './dashboard/tabs/StoriesTab';
 import { ReportsTab } from './dashboard/tabs/ReportsTab';
 import { BannersTab } from './dashboard/tabs/BannersTab';
@@ -708,7 +710,7 @@ interface DashboardProps {
 
 export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const { success, error, warning, info } = useToast();
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'stories' | 'reports' | 'settings' | 'banners' | 'moderation' | 'financial'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'works' | 'stories' | 'reports' | 'settings' | 'banners' | 'moderation' | 'financial'>('overview');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Custom Hooks & Notification Settings
@@ -718,6 +720,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const bannersHook = useBanners();
   const adPricingHook = useAdPricing();
   const adminUsersHook = useAdminUsers();
+  const worksModerationHook = useWorksModeration();
 
   // Request Settings & Notification States
   const [requestDisplayOnScreen, setRequestDisplayOnScreen] = useState<boolean>(() => {
@@ -2446,6 +2449,10 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 setUserModalOpen(true);
               }}
             />
+          )}
+
+          {activeTab === 'works' && (
+            <WorksModerationTab worksModerationHook={worksModerationHook} />
           )}
 
           {activeTab === 'stories' && (
