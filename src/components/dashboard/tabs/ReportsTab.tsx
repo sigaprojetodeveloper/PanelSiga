@@ -1,5 +1,6 @@
 import React from 'react';
 import { Search } from 'lucide-react';
+import { translateTargetType } from '../utils';
 
 interface ReportsTabProps {
   reportHook: any;
@@ -95,9 +96,8 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ reportHook, onOpenReport
           <table className="admin-table">
             <thead>
               <tr>
-                <th>Alvo</th>
                 <th>Categoria / Motivo</th>
-                <th>Descrição</th>
+                <th>Tipo de Alvo</th>
                 <th>Data</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
@@ -106,13 +106,13 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ reportHook, onOpenReport
             <tbody>
               {reportHook.loading ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                     Carregando denúncias...
                   </td>
                 </tr>
               ) : reportHook.reports.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                     Nenhuma denúncia encontrada com os filtros selecionados.
                   </td>
                 </tr>
@@ -120,14 +120,10 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ reportHook, onOpenReport
                 reportHook.reports.map((rep: any) => (
                   <tr key={rep.id}>
                     <td>
-                      <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{rep.target_type}</span>
-                      <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)' }}>ID: {rep.target_id.slice(0, 8)}...</span>
+                      <span style={{ fontWeight: 500 }}>{rep.reason || rep.reason_category || rep.category || 'Não informado'}</span>
                     </td>
                     <td>
-                      <span style={{ fontWeight: 500 }}>{rep.reason}</span>
-                    </td>
-                    <td style={{ maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {rep.description || 'Sem descrição'}
+                      <span style={{ fontWeight: 600 }}>{translateTargetType(rep.target_type)}</span>
                     </td>
                     <td>{new Date(rep.created_at).toLocaleDateString()}</td>
                     <td>

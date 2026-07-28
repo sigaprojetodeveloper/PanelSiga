@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, FileText } from 'lucide-react';
+import { X, FileText, ExternalLink } from 'lucide-react';
+import { translateTargetType } from '../utils';
 
 interface ReportDetailsModalProps {
   isOpen: boolean;
@@ -8,6 +9,8 @@ interface ReportDetailsModalProps {
   reportNotes: string;
   setReportNotes: (notes: string) => void;
   onUpdateStatus: (status: 'resolved' | 'ignored' | 'in_review') => Promise<void>;
+  onOpenUser?: (userId: string) => void;
+  onOpenWork?: (workId: string) => void;
 }
 
 export const ReportDetailsModal: React.FC<ReportDetailsModalProps> = ({
@@ -16,9 +19,14 @@ export const ReportDetailsModal: React.FC<ReportDetailsModalProps> = ({
   selectedReport,
   reportNotes,
   setReportNotes,
-  onUpdateStatus
+  onUpdateStatus,
+  onOpenUser,
+  onOpenWork
 }) => {
   if (!isOpen || !selectedReport) return null;
+
+  const isUserTarget = selectedReport.target_type === 'user';
+  const isWorkTarget = selectedReport.target_type === 'work' || selectedReport.target_type === 'construction';
 
   return (
     <div className="modal-overlay">
@@ -31,7 +39,7 @@ export const ReportDetailsModal: React.FC<ReportDetailsModalProps> = ({
         <div className="modal-grid-2" style={{ gap: '16px 24px', marginBottom: '20px' }}>
           <div className="modal-field">
             <span className="label">Categoria / Motivo</span>
-            <span className="value" style={{ fontWeight: 600 }}>{selectedReport.reason}</span>
+            <span className="value" style={{ fontWeight: 600 }}>{selectedReport.reason || selectedReport.reason_category || selectedReport.category || 'Não informado'}</span>
           </div>
           <div className="modal-field">
             <span className="label">Data de Envio</span>
@@ -39,15 +47,58 @@ export const ReportDetailsModal: React.FC<ReportDetailsModalProps> = ({
           </div>
           <div className="modal-field">
             <span className="label">Tipo do Alvo</span>
-            <span className="value" style={{ textTransform: 'capitalize' }}>{selectedReport.target_type}</span>
+            <span className="value" style={{ fontWeight: 600 }}>{translateTargetType(selectedReport.target_type)}</span>
           </div>
           <div className="modal-field">
             <span className="label">ID do Alvo</span>
-            <span className="value" style={{ fontFamily: 'monospace', fontSize: '13px' }}>{selectedReport.target_id}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="value" style={{ fontFamily: 'monospace', fontSize: '13px' }}>{selectedReport.target_id}</span>
+              {isUserTarget && onOpenUser && selectedReport.target_id && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '2px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  onClick={() => {
+                    onClose();
+                    onOpenUser(selectedReport.target_id);
+                  }}
+                >
+                  <ExternalLink size={12} /> Abrir Perfil
+                </button>
+              )}
+              {isWorkTarget && onOpenWork && selectedReport.target_id && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '2px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  onClick={() => {
+                    onClose();
+                    onOpenWork(selectedReport.target_id);
+                  }}
+                >
+                  <ExternalLink size={12} /> Abrir Obra
+                </button>
+              )}
+            </div>
           </div>
           <div className="modal-field">
             <span className="label">ID do Denunciante</span>
-            <span className="value" style={{ fontFamily: 'monospace', fontSize: '13px' }}>{selectedReport.reporter_id || 'Anônimo / Não inf.'}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="value" style={{ fontFamily: 'monospace', fontSize: '13px' }}>{selectedReport.reporter_id || 'Anônimo / Não inf.'}</span>
+              {onOpenUser && selectedReport.reporter_id && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '2px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  onClick={() => {
+                    onClose();
+                    onOpenUser(selectedReport.reporter_id);
+                  }}
+                >
+                  <ExternalLink size={12} /> Abrir Perfil
+                </button>
+              )}
+            </div>
           </div>
           <div className="modal-field">
             <span className="label">Permite Contato Direto</span>

@@ -152,3 +152,25 @@ export const assembleLinkUrl = (
   }
   return rawValue;
 };
+
+export const translateTargetType = (targetType?: string): string => {
+  if (!targetType) return 'Nenhum';
+  const type = targetType.toLowerCase();
+  switch (type) {
+    case 'user':
+      return 'Usuário';
+    case 'work':
+    case 'construction':
+      return 'Obra';
+    case 'proposal':
+      return 'Proposta';
+    case 'budget':
+      return 'Orçamento';
+    case 'media':
+    case 'content':
+      return 'Conteúdo';
+    default:
+      return targetType;
+  }
+};
+

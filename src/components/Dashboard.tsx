@@ -3683,6 +3683,14 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
         reportNotes={reportNotes}
         setReportNotes={setReportNotes}
         onUpdateStatus={handleUpdateReportStatus}
+        onOpenUser={async (userId: string) => {
+          await userHook.loadUserDetails(userId);
+          setSelectedUserTab('portfolio');
+          setUserModalOpen(true);
+        }}
+        onOpenWork={(workId: string) => {
+          info(`Visualização da Obra ID ${workId}`);
+        }}
       />
 
       {/* ================= MODAL: ADD BANNER ================= */}
