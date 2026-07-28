@@ -80,16 +80,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </a>
         <a
           onClick={() => {
-            setActiveTab('works');
-            setMobileSidebarOpen(false);
-          }}
-          className={`nav-item ${activeTab === 'works' ? 'active' : ''}`}
-        >
-          <Hammer size={18} />
-          Obras
-        </a>
-        <a
-          onClick={() => {
             setActiveTab('stories');
             setMobileSidebarOpen(false);
           }}
@@ -117,6 +107,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <Users size={18} />
           Usuários
+        </a>
+        <a
+          onClick={() => {
+            setActiveTab('works');
+            setMobileSidebarOpen(false);
+          }}
+          className={`nav-item ${activeTab === 'works' ? 'active' : ''}`}
+        >
+          <Hammer size={18} />
+          Obras
         </a>
         <a
           onClick={() => {

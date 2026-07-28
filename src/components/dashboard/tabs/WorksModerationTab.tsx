@@ -85,87 +85,81 @@ export const WorksModerationTab: React.FC<WorksModerationTabProps> = ({ worksMod
 
   return (
     <div className="works-moderation-tab" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Header & Filters Toolbar */}
-      <div className="filters-bar" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>Moderação de Obras</h2>
-            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-              Gerencie, visualize detalhes e aplique ações de bloqueio em obras cadastradas.
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={refetch}
-              disabled={loading}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-              Atualizar Lista
-            </button>
-          </div>
-        </div>
-
-        {/* Filters Group & Search */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-          {/* Status Pills */}
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {statusOptions.map((opt) => (
-              <button
-                key={opt.value}
-                className={`btn btn-sm ${statusFilter === opt.value ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setStatusFilter(opt.value)}
-                style={{ fontSize: '12px', padding: '6px 12px' }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Search Box, Sort & Limit selector */}
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', width: '200px' }}>
-              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+      {/* Filters Bar */}
+      <div className="filters-bar">
+        <div className="filters-group">
+          <div className="filter-control">
+            <label>Buscar</label>
+            <div style={{ position: 'relative', width: '220px', paddingTop: '6px' }}>
+              <Search size={14} style={{ position: 'absolute', left: '10px', top: '17px', color: 'var(--text-muted)' }} />
               <input
                 type="text"
                 className="input-field"
                 placeholder="Buscar obra, cidade..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ paddingLeft: '32px', fontSize: '12px', height: '34px' }}
+                style={{ paddingLeft: '32px', fontSize: '13px', height: '36px' }}
               />
             </div>
+          </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
-              <span>Ordem:</span>
+          <div className="filter-control">
+            <label>Status da Obra</label>
+            <div style={{ paddingTop: '6px' }}>
+              <select
+                className="select-field"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as WorkStatus | 'all')}
+                style={{ fontSize: '13px', height: '36px', padding: '4px 10px', marginLeft: '16px' }}
+              >
+                {statusOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="filter-control">
+            <label>Ordenação</label>
+            <div style={{ paddingTop: '6px' }}>
               <select
                 className="select-field"
                 value={sortOrder}
                 onChange={(e) => setSortOrder(e.target.value as 'desc' | 'asc')}
-                style={{ fontSize: '12px', height: '34px', padding: '4px 8px' }}
+                style={{ fontSize: '13px', height: '36px', padding: '4px 10px' }}
               >
                 <option value="desc">Mais recentes</option>
                 <option value="asc">Mais antigas</option>
               </select>
             </div>
+          </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
-              <span>Por pág:</span>
+          <div className="filter-control">
+            <label>Exibir</label>
+            <div style={{ paddingTop: '6px' }}>
               <select
                 className="select-field"
                 value={limit}
                 onChange={(e) => setLimit(Number(e.target.value))}
-                style={{ fontSize: '12px', height: '34px', padding: '4px 8px' }}
+                style={{ fontSize: '13px', height: '36px', padding: '4px 10px' }}
               >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
+                <option value={10}>10 por pág.</option>
+                <option value={25}>25 por pág.</option>
+                <option value={50}>50 por pág.</option>
               </select>
             </div>
           </div>
         </div>
+
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={refetch}
+          disabled={loading}
+        >
+          Atualizar Lista
+        </button>
       </div>
 
       {/* Main Table Content */}

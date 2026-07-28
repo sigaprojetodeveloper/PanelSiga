@@ -12,18 +12,21 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userHook, onSelectUser }) =>
       {/* Search & Filter Bar */}
       <div className="filters-bar">
         <div className="filters-group">
-          <div className="search-input-wrapper">
-            <Search size={16} className="search-icon" />
-            <input
-              type="text"
-              className="input-field"
-              placeholder="Buscar por nome, email, CPF..."
-              value={userHook.search}
-              onChange={(e) => {
-                userHook.setSearch(e.target.value);
-                userHook.setPage(1);
-              }}
-            />
+          <div className="filter-control">
+            <label>Buscar</label>
+            <div className="search-input-wrapper">
+              <Search size={16} className="search-icon" />
+              <input
+                type="text"
+                className="input-field"
+                placeholder="Buscar por nome, email, CPF..."
+                value={userHook.search}
+                onChange={(e) => {
+                  userHook.setSearch(e.target.value);
+                  userHook.setPage(1);
+                }}
+              />
+            </div>
           </div>
 
           <div className="filter-control">
