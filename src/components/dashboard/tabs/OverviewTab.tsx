@@ -9,6 +9,7 @@ import {
   Info
 } from 'lucide-react';
 import { useToast } from '../../../hooks/useToast';
+import type { DashboardTab } from '../Sidebar';
 
 interface OverviewTabProps {
   totalUsersCount: number;
@@ -19,6 +20,7 @@ interface OverviewTabProps {
   totalActiveStoriesChannelsCount: number | null;
   totalActiveBannersCount: number | null;
   pendingRequestsCount: number;
+  onNavigate?: (tab: DashboardTab) => void;
 }
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({
@@ -29,18 +31,33 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   pendingReportsCount,
   totalActiveStoriesChannelsCount,
   totalActiveBannersCount,
-  pendingRequestsCount
+  pendingRequestsCount,
+  onNavigate
 }) => {
   const { info } = useToast();
+
+  const handleCardClick = (tab: DashboardTab) => {
+    if (onNavigate) {
+      onNavigate(tab);
+    }
+  };
 
   return (
     <div>
       <div className="stats-grid">
-        <div className="stat-card" style={{ position: 'relative' }}>
+        {/* Total Usuários */}
+        <div
+          className="stat-card"
+          style={{ position: 'relative', cursor: onNavigate ? 'pointer' : 'default' }}
+          onClick={() => handleCardClick('users')}
+        >
           <Info
             size={14}
-            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
-            onClick={() => info("Total de usuários cadastrados no aplicativo (clientes e profissionais).")}
+            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer', zIndex: 2 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              info("Total de usuários cadastrados no aplicativo (clientes e profissionais).");
+            }}
           />
           <div className="stat-info">
             <h3>Total Usuários</h3>
@@ -50,11 +67,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <Users size={24} />
           </div>
         </div>
-        <div className="stat-card" style={{ position: 'relative' }}>
+
+        {/* Novos Usuários */}
+        <div
+          className="stat-card"
+          style={{ position: 'relative', cursor: onNavigate ? 'pointer' : 'default' }}
+          onClick={() => handleCardClick('users')}
+        >
           <Info
             size={14}
-            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
-            onClick={() => info("Usuários que se cadastraram no aplicativo há menos de 1 mês.")}
+            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer', zIndex: 2 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              info("Usuários que se cadastraram no aplicativo há menos de 1 mês.");
+            }}
           />
           <div className="stat-info">
             <h3>Novos Usuários</h3>
@@ -64,11 +90,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <Users size={24} />
           </div>
         </div>
-        <div className="stat-card" style={{ position: 'relative' }}>
+
+        {/* Novas Obras */}
+        <div
+          className="stat-card"
+          style={{ position: 'relative', cursor: onNavigate ? 'pointer' : 'default' }}
+          onClick={() => handleCardClick('works')}
+        >
           <Info
             size={14}
-            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
-            onClick={() => info("Obras cadastradas no aplicativo há menos de 1 mês.")}
+            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer', zIndex: 2 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              info("Obras cadastradas no aplicativo há menos de 1 mês.");
+            }}
           />
           <div className="stat-info">
             <h3>Novas Obras</h3>
@@ -78,11 +113,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <Hammer size={24} />
           </div>
         </div>
-        <div className="stat-card" style={{ position: 'relative' }}>
+
+        {/* Novos Contratos */}
+        <div
+          className="stat-card"
+          style={{ position: 'relative', cursor: onNavigate ? 'pointer' : 'default' }}
+          onClick={() => handleCardClick('financial')}
+        >
           <Info
             size={14}
-            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
-            onClick={() => info("Contratos fechados (propostas aceitas) há menos de 1 mês.")}
+            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer', zIndex: 2 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              info("Contratos fechados (propostas aceitas) há menos de 1 mês.");
+            }}
           />
           <div className="stat-info">
             <h3>Novos Contratos</h3>
@@ -92,11 +136,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <FileText size={24} />
           </div>
         </div>
-        <div className="stat-card" style={{ position: 'relative' }}>
+
+        {/* Denúncias Pendentes */}
+        <div
+          className="stat-card"
+          style={{ position: 'relative', cursor: onNavigate ? 'pointer' : 'default' }}
+          onClick={() => handleCardClick('reports')}
+        >
           <Info
             size={14}
-            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
-            onClick={() => info("Total de denúncias recebidas com status pendente de revisão.")}
+            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer', zIndex: 2 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              info("Total de denúncias recebidas com status pendente de revisão.");
+            }}
           />
           <div className="stat-info">
             <h3>Denúncias Pendentes</h3>
@@ -106,11 +159,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <AlertTriangle size={24} />
           </div>
         </div>
-        <div className="stat-card" style={{ position: 'relative' }}>
+
+        {/* Canais de Stories */}
+        <div
+          className="stat-card"
+          style={{ position: 'relative', cursor: onNavigate ? 'pointer' : 'default' }}
+          onClick={() => handleCardClick('stories')}
+        >
           <Info
             size={14}
-            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
-            onClick={() => info("Quantidade total de canais de stories ativos no aplicativo, sem restrição de localização.")}
+            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer', zIndex: 2 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              info("Quantidade total de canais de stories ativos no aplicativo, sem restrição de localização.");
+            }}
           />
           <div className="stat-info">
             <h3>Canais de Stories</h3>
@@ -120,11 +182,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <Film size={24} />
           </div>
         </div>
-        <div className="stat-card" style={{ position: 'relative' }}>
+
+        {/* Banners */}
+        <div
+          className="stat-card"
+          style={{ position: 'relative', cursor: onNavigate ? 'pointer' : 'default' }}
+          onClick={() => handleCardClick('banners')}
+        >
           <Info
             size={14}
-            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
-            onClick={() => info("Quantidade total de banners publicitários atualmente ativos no aplicativo, sem restrição de localização.")}
+            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer', zIndex: 2 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              info("Quantidade total de banners publicitários atualmente ativos no aplicativo, sem restrição de localização.");
+            }}
           />
           <div className="stat-info">
             <h3>Banners</h3>
@@ -134,11 +205,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <ImageIcon size={24} />
           </div>
         </div>
-        <div className="stat-card" style={{ position: 'relative' }}>
+
+        {/* Solicitações Pendentes */}
+        <div
+          className="stat-card"
+          style={{ position: 'relative', cursor: onNavigate ? 'pointer' : 'default' }}
+          onClick={() => handleCardClick('moderation')}
+        >
           <Info
             size={14}
-            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
-            onClick={() => info("Total de solicitações de novos banners ou canais de stories aguardando moderação.")}
+            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer', zIndex: 2 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              info("Total de solicitações de novos banners ou canais de stories aguardando moderação.");
+            }}
           />
           <div className="stat-info">
             <h3>Solicitações Pendentes</h3>

@@ -2458,6 +2458,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               totalActiveStoriesChannelsCount={totalActiveStoriesChannelsCount}
               totalActiveBannersCount={totalActiveBannersCount}
               pendingRequestsCount={pendingRequestsCount}
+              onNavigate={setActiveTab}
             />
           )}
 
