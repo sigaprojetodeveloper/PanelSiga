@@ -1265,6 +1265,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
   // Local state for Overview counts without filters
   const [newUsersCount, setNewUsersCount] = useState<number | null>(null);
+  const [newWorksCount, setNewWorksCount] = useState<number | null>(null);
   const [newContractsCount, setNewContractsCount] = useState<number | null>(null);
   const [contractValue, setContractValue] = useState<number>(49.90);
 
@@ -1427,6 +1428,25 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     }
     fetchNewUsersCount();
   }, [userHook.users]);
+
+  useEffect(() => {
+    async function fetchNewWorksCount() {
+      try {
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+        const { count, error: err } = await supabase
+          .from('works')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', oneMonthAgo.toISOString());
+        if (!err && count !== null) {
+          setNewWorksCount(count);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar novas obras:', err);
+      }
+    }
+    fetchNewWorksCount();
+  }, [worksModerationHook.works]);
 
   useEffect(() => {
     async function fetchNewContractsCount() {
@@ -2432,6 +2452,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
             <OverviewTab
               totalUsersCount={totalUsersCount}
               newUsersCount={newUsersCount}
+              newWorksCount={newWorksCount}
               newContractsCount={newContractsCount}
               pendingReportsCount={pendingReportsCount}
               totalActiveStoriesChannelsCount={totalActiveStoriesChannelsCount}
@@ -4063,7 +4084,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
                       <span>📍 {work.city || 'Desconhecida'}/{work.state || ''}</span>
                       <span style={{ textTransform: 'uppercase', fontWeight: 600, color: 'var(--primary)' }}>
-                        {work.status === 'aberta' || work.status === 'available' ? 'Aberta' : 'Em andamento'}
+                        {work.status === 'aberta' || work.status === 'available' ? 'Disponível' : 'Em andamento'}
                       </span>
                     </div>
                   </div>

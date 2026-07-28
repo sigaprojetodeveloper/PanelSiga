@@ -34,6 +34,8 @@ export const WorksModerationTab: React.FC<WorksModerationTabProps> = ({ worksMod
     totalPages,
     searchQuery,
     setSearchQuery,
+    sortOrder,
+    setSortOrder,
     refetch,
 
     // Detail Modal
@@ -58,7 +60,7 @@ export const WorksModerationTab: React.FC<WorksModerationTabProps> = ({ worksMod
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'aberta':
-        return <span className="badge badge-info" style={{ backgroundColor: '#e0f2fe', color: '#0369a1' }}>Aberta</span>;
+        return <span className="badge badge-info" style={{ backgroundColor: '#e0f2fe', color: '#0369a1' }}>Disponível</span>;
       case 'em_andamento':
         return <span className="badge badge-warning">Em Andamento</span>;
       case 'concluida':
@@ -74,7 +76,7 @@ export const WorksModerationTab: React.FC<WorksModerationTabProps> = ({ worksMod
 
   const statusOptions: { label: string; value: WorkStatus | 'all' }[] = [
     { label: 'Todas', value: 'all' },
-    { label: 'Abertas', value: 'aberta' },
+    { label: 'Disponíveis', value: 'aberta' },
     { label: 'Em Andamento', value: 'em_andamento' },
     { label: 'Concluídas', value: 'concluida' },
     { label: 'Canceladas', value: 'cancelled' },
@@ -122,9 +124,9 @@ export const WorksModerationTab: React.FC<WorksModerationTabProps> = ({ worksMod
             ))}
           </div>
 
-          {/* Search Box & Limit selector */}
+          {/* Search Box, Sort & Limit selector */}
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', width: '220px' }}>
+            <div style={{ position: 'relative', width: '200px' }}>
               <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
@@ -134,6 +136,19 @@ export const WorksModerationTab: React.FC<WorksModerationTabProps> = ({ worksMod
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{ paddingLeft: '32px', fontSize: '12px', height: '34px' }}
               />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
+              <span>Ordem:</span>
+              <select
+                className="select-field"
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as 'desc' | 'asc')}
+                style={{ fontSize: '12px', height: '34px', padding: '4px 8px' }}
+              >
+                <option value="desc">Mais recentes</option>
+                <option value="asc">Mais antigas</option>
+              </select>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -271,28 +286,14 @@ export const WorksModerationTab: React.FC<WorksModerationTabProps> = ({ worksMod
                         {getStatusBadge(work.status)}
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '6px', justifyContent: 'flex-end' }}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => handleOpenDetail(work)}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            <Eye size={13} /> Ver Detalhes
-                          </button>
-
-                          {work.status !== 'bloqueada' && (
-                            <button
-                              type="button"
-                              className="btn btn-danger btn-sm"
-                              onClick={() => handleOpenBlockModal(work)}
-                              title="Bloquear Obra"
-                              style={{ padding: '4px 8px' }}
-                            >
-                              <ShieldAlert size={14} />
-                            </button>
-                          )}
-                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleOpenDetail(work)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <Eye size={13} /> Ver Detalhes
+                        </button>
                       </td>
                     </tr>
                   );

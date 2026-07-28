@@ -39,7 +39,7 @@ export const WorkDetailModal: React.FC<WorkDetailModalProps> = ({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'aberta':
-        return <span className="badge badge-info" style={{ backgroundColor: '#e0f2fe', color: '#0369a1' }}>Aberta</span>;
+        return <span className="badge badge-info" style={{ backgroundColor: '#e0f2fe', color: '#0369a1' }}>Disponível</span>;
       case 'em_andamento':
         return <span className="badge badge-warning">Em Andamento</span>;
       case 'concluida':

@@ -62,6 +62,7 @@ export interface WorkFilterParams {
   page: number;
   limit: number;
   searchQuery?: string;
+  sortOrder?: 'desc' | 'asc';
 }
 
 export interface PaginatedWorksResult {

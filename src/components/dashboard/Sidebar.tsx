@@ -11,7 +11,7 @@ import {
   Image as ImageIcon,
   Bell,
   Award,
-  Briefcase,
+  Hammer,
   X
 } from 'lucide-react';
 
@@ -70,16 +70,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </a>
         <a
           onClick={() => {
-            setActiveTab('works');
-            setMobileSidebarOpen(false);
-          }}
-          className={`nav-item ${activeTab === 'works' ? 'active' : ''}`}
-        >
-          <Briefcase size={18} />
-          Obras
-        </a>
-        <a
-          onClick={() => {
             setActiveTab('financial');
             setMobileSidebarOpen(false);
           }}
@@ -87,6 +77,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <Award size={18} />
           Financeiro
+        </a>
+        <a
+          onClick={() => {
+            setActiveTab('works');
+            setMobileSidebarOpen(false);
+          }}
+          className={`nav-item ${activeTab === 'works' ? 'active' : ''}`}
+        >
+          <Hammer size={18} />
+          Obras
         </a>
         <a
           onClick={() => {

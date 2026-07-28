@@ -11,6 +11,7 @@ export function useWorksModeration() {
   const [total, setTotal] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
   // Modal states
   const [selectedWork, setSelectedWork] = useState<Work | null>(null);
@@ -28,7 +29,8 @@ export function useWorksModeration() {
         status: statusFilter,
         page,
         limit,
-        searchQuery
+        searchQuery,
+        sortOrder
       });
       setWorks(res.data);
       setTotal(res.total);
@@ -38,7 +40,7 @@ export function useWorksModeration() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, page, limit, searchQuery]);
+  }, [statusFilter, page, limit, searchQuery, sortOrder]);
 
   useEffect(() => {
     fetchWorks();
@@ -46,6 +48,11 @@ export function useWorksModeration() {
 
   const handleStatusFilterChange = (newStatus: WorkStatus | 'all') => {
     setStatusFilter(newStatus);
+    setPage(1);
+  };
+
+  const handleSortOrderChange = (newSortOrder: 'desc' | 'asc') => {
+    setSortOrder(newSortOrder);
     setPage(1);
   };
 
@@ -128,6 +135,8 @@ export function useWorksModeration() {
     totalPages,
     searchQuery,
     setSearchQuery,
+    sortOrder,
+    setSortOrder: handleSortOrderChange,
     refetch: fetchWorks,
 
     // Detail Modal

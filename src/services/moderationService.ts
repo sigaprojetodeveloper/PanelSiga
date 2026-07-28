@@ -170,8 +170,9 @@ export const moderationService = {
     page?: number;
     limit?: number;
     searchQuery?: string;
+    sortOrder?: 'desc' | 'asc';
   }) {
-    const { status = 'all', page = 1, limit = 10, searchQuery } = params;
+    const { status = 'all', page = 1, limit = 10, searchQuery, sortOrder = 'desc' } = params;
     const offset = (page - 1) * limit;
 
     let query = supabase
@@ -196,7 +197,7 @@ export const moderationService = {
     }
 
     const { data: worksData, count, error } = await (query
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: sortOrder === 'asc' })
       .range(offset, offset + limit - 1) as any);
 
     if (error) {

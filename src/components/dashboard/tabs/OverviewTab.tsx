@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   FileText,
   Image as ImageIcon,
+  Hammer,
   Info
 } from 'lucide-react';
 import { useToast } from '../../../hooks/useToast';
@@ -12,6 +13,7 @@ import { useToast } from '../../../hooks/useToast';
 interface OverviewTabProps {
   totalUsersCount: number;
   newUsersCount: number | null;
+  newWorksCount: number | null;
   newContractsCount: number | null;
   pendingReportsCount: number;
   totalActiveStoriesChannelsCount: number | null;
@@ -22,6 +24,7 @@ interface OverviewTabProps {
 export const OverviewTab: React.FC<OverviewTabProps> = ({
   totalUsersCount,
   newUsersCount,
+  newWorksCount,
   newContractsCount,
   pendingReportsCount,
   totalActiveStoriesChannelsCount,
@@ -59,6 +62,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           </div>
           <div className="stat-icon-wrapper green" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981', marginTop: '8px' }}>
             <Users size={24} />
+          </div>
+        </div>
+        <div className="stat-card" style={{ position: 'relative' }}>
+          <Info
+            size={14}
+            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer' }}
+            onClick={() => info("Obras cadastradas no aplicativo há menos de 1 mês.")}
+          />
+          <div className="stat-info">
+            <h3>Novas Obras</h3>
+            <div className="stat-value">{newWorksCount !== null ? newWorksCount : '...'}</div>
+          </div>
+          <div className="stat-icon-wrapper orange" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', marginTop: '8px' }}>
+            <Hammer size={24} />
           </div>
         </div>
         <div className="stat-card" style={{ position: 'relative' }}>
