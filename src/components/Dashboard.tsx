@@ -18,10 +18,13 @@ import { useAdminUsers } from '../hooks/useAdminUsers';
 import { Country, State, City } from 'country-state-city';
 import logoImg from '../assets/logo.png';
 import ImageCropperModal from './ImageCropperModal';
+import { VerificationBadgeAdmin, LEVEL_CONFIG } from './users/VerificationBadgeAdmin';
+import { VerificationLevelSelect } from './users/VerificationLevelSelect';
 import { Sidebar } from './dashboard/Sidebar';
 import { Header } from './dashboard/Header';
 import { OverviewTab } from './dashboard/tabs/OverviewTab';
 import { UsersTab } from './dashboard/tabs/UsersTab';
+import { SeloTab } from './dashboard/tabs/SeloTab';
 import { WorksModerationTab } from './dashboard/tabs/WorksModerationTab';
 import { StoriesTab } from './dashboard/tabs/StoriesTab';
 import { ReportsTab } from './dashboard/tabs/ReportsTab';
@@ -710,7 +713,7 @@ interface DashboardProps {
 
 export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const { success, error, warning, info } = useToast();
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'works' | 'stories' | 'reports' | 'settings' | 'banners' | 'moderation' | 'financial'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'selo' | 'users' | 'works' | 'stories' | 'reports' | 'settings' | 'banners' | 'moderation' | 'financial'>('overview');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Custom Hooks & Notification Settings
@@ -2462,6 +2465,17 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
             />
           )}
 
+          {activeTab === 'selo' && (
+            <SeloTab
+              userHook={userHook}
+              onSelectUser={async (u) => {
+                await userHook.loadUserDetails(u.id);
+                setSelectedUserTab('portfolio');
+                setUserModalOpen(true);
+              }}
+            />
+          )}
+
           {activeTab === 'users' && (
             <UsersTab
               userHook={userHook}
@@ -2585,7 +2599,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
             <button className="modal-close" onClick={() => setUserModalOpen(false)}>
               <X size={20} />
             </button>
-            <h3 className="modal-title">Ficha Detalhada do Usuário</h3>
+            <h3 className="modal-title">Usuário</h3>
 
             {(() => {
               const user = userHook.selectedUser;
@@ -2639,12 +2653,23 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 window.open(url, '_blank');
               };
 
+              const userLevel = (!user.is_suspended && user.verification_level) ? user.verification_level : 'none';
+              const levelColor = (userLevel !== 'none' && LEVEL_CONFIG[userLevel]) ? LEVEL_CONFIG[userLevel].color : null;
+
               return (
                 <div className="profile-modal-grid">
                   {/* Left Column - Hero Profile Card */}
                   <div className="profile-sidebar">
                     <div className="profile-avatar-container">
-                      <div className="profile-avatar-wrapper">
+                      <div
+                        className="profile-avatar-wrapper"
+                        style={{
+                          border: levelColor ? `3px solid ${levelColor}` : '4px solid var(--bg-card)',
+                          boxShadow: levelColor
+                            ? `0 0 0 2px ${levelColor}35, var(--shadow-md)`
+                            : 'var(--shadow-md), 0 0 0 1px var(--border-light)',
+                        }}
+                      >
                         {profile?.avatar_url ? (
                           <img src={profile.avatar_url} className="profile-avatar-img" alt={user.name} />
                         ) : (
@@ -2693,6 +2718,21 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                         <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '10px', textTransform: 'uppercase', fontWeight: 600 }}>Papel</span>
                         <strong style={{ color: 'var(--text-main)' }}>{user.role_flags?.join(' & ') || 'Nenhum'}</strong>
                       </div>
+                      {/* Selo Siga Check */}
+                      <div style={{ padding: '10px', backgroundColor: 'var(--bg-app)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '10px', textTransform: 'uppercase', fontWeight: 600 }}>Selo Siga Check</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <VerificationBadgeAdmin level={user.verification_level || 'none'} isSuspended={Boolean(user.is_suspended)} />
+                        </div>
+                        <div style={{ marginTop: '4px' }}>
+                          <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Alterar Nível</label>
+                          <VerificationLevelSelect
+                            currentLevel={user.verification_level || 'none'}
+                            onChange={(newLevel: any) => userHook.updateVerificationLevel(user.id, newLevel)}
+                          />
+                        </div>
+                      </div>
+
                       <div>
                         <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '10px', textTransform: 'uppercase', fontWeight: 600 }}>Documento ({user.document_type || 'CPF'})</span>
                         <strong style={{ color: 'var(--text-main)', fontSize: '12px' }}>{decodeDocumentHash(user.document_hash) || 'Não informado'}</strong>

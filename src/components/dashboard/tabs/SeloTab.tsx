@@ -1,13 +1,15 @@
 import React from 'react';
-import { Search, CheckCircle2 } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { VerificationBadgeAdmin, LEVEL_CONFIG } from '../../users/VerificationBadgeAdmin';
+import { VerificationLevelSelect } from '../../users/VerificationLevelSelect';
+import { UserSuspensionToggle } from '../../users/UserSuspensionToggle';
 
-interface UsersTabProps {
+interface SeloTabProps {
   userHook: any;
   onSelectUser: (user: any) => Promise<void>;
 }
 
-export const UsersTab: React.FC<UsersTabProps> = ({ userHook, onSelectUser }) => {
+export const SeloTab: React.FC<SeloTabProps> = ({ userHook, onSelectUser }) => {
   return (
     <div>
       {/* Search & Filter Bar */}
@@ -31,44 +33,48 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userHook, onSelectUser }) =>
             </div>
           </div>
 
-          {/* Status */}
+          {/* Nível Siga Check */}
           <div className="filter-control">
-            <label>Status</label>
+            <label>Nível Siga Check</label>
             <select
               className="select-field"
-              value={userHook.statusFilter || ''}
+              value={userHook.verificationLevelFilter || ''}
               onChange={(e) => {
-                userHook.setStatusFilter((e.target.value as any) || undefined);
+                userHook.setVerificationLevelFilter((e.target.value as any) || undefined);
                 userHook.setPage(1);
               }}
             >
               <option value="">Todos</option>
-              <option value="active">Ativos</option>
-              <option value="blocked">Bloqueados</option>
-              <option value="deleted">Excluídos</option>
+              <option value="none">Não Verificado</option>
+              <option value="bronze">Bronze</option>
+              <option value="silver">Prata</option>
+              <option value="gold">Ouro</option>
+              <option value="platinum">Platina</option>
+              <option value="diamond">Diamante</option>
             </select>
           </div>
 
-          {/* Papel */}
+          {/* Filtro de Suspensão */}
           <div className="filter-control">
-            <label>Papel</label>
+            <label>Suspensão Siga Check</label>
             <select
               className="select-field"
-              value={userHook.roleFilter || ''}
+              value={userHook.isSuspendedFilter === undefined ? '' : String(userHook.isSuspendedFilter)}
               onChange={(e) => {
-                userHook.setRoleFilter((e.target.value as any) || undefined);
+                const val = e.target.value;
+                userHook.setIsSuspendedFilter(val === '' ? undefined : val === 'true');
                 userHook.setPage(1);
               }}
             >
               <option value="">Todos</option>
-              <option value="cliente">Cliente</option>
-              <option value="profissional">Profissional</option>
+              <option value="false">Apenas Ativos (Não Suspensos)</option>
+              <option value="true">Apenas Suspensos</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* Users Table */}
+      {/* Selo Table */}
       <div className="table-container">
         <div className="table-wrapper">
           <table className="admin-table">
@@ -77,20 +83,22 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userHook, onSelectUser }) =>
                 <th>Nome</th>
                 <th>Email</th>
                 <th>Papel</th>
-                <th>Status</th>
-                <th>Selo</th>
+                <th>Selo Siga Check</th>
+                <th>Alterar Nível</th>
+                <th>Suspensão</th>
+                <th>Última Alteração</th>
               </tr>
             </thead>
             <tbody>
               {userHook.loading ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                     Carregando usuários...
                   </td>
                 </tr>
               ) : userHook.users.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                     Nenhum usuário encontrado.
                   </td>
                 </tr>
@@ -105,6 +113,15 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userHook, onSelectUser }) =>
                   const levelCfg = LEVEL_CONFIG[effectiveLevel];
                   const ringColor = effectiveLevel !== 'none' ? levelCfg.border : 'var(--border-light)';
                   const ringGlow = effectiveLevel !== 'none' ? levelCfg.glow : 'none';
+                  const updatedAtFormatted = u.verification_updated_at
+                    ? new Date(u.verification_updated_at).toLocaleString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : '—';
 
                   return (
                     <tr key={u.id}>
@@ -188,23 +205,31 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userHook, onSelectUser }) =>
                           ))}
                         </div>
                       </td>
-                      <td onClick={() => onSelectUser(u)} style={{ cursor: 'pointer' }}>
-                        <span
-                          className={`badge ${
-                            u.status === 'active'
-                              ? 'badge-success'
-                              : u.status === 'blocked'
-                              ? 'badge-danger'
-                              : 'badge-warning'
-                          }`}
-                        >
-                          {u.status}
-                        </span>
-                      </td>
 
                       {/* Selo Visual */}
                       <td onClick={() => onSelectUser(u)} style={{ cursor: 'pointer' }}>
                         <VerificationBadgeAdmin level={level} isSuspended={isSuspended} />
+                      </td>
+
+                      {/* Dropdown de Alteração de Nível */}
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <VerificationLevelSelect
+                          currentLevel={level}
+                          onChange={(newLevel) => userHook.updateVerificationLevel(u.id, newLevel)}
+                        />
+                      </td>
+
+                      {/* Switch Toggle de Suspensão */}
+                      <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                        <UserSuspensionToggle
+                          isSuspended={isSuspended}
+                          onChange={(newSuspendedState) => userHook.toggleSuspension(u.id, newSuspendedState)}
+                        />
+                      </td>
+
+                      {/* Data de Modificação */}
+                      <td onClick={() => onSelectUser(u)} style={{ cursor: 'pointer', fontSize: '12px', color: 'var(--text-muted)' }}>
+                        {updatedAtFormatted}
                       </td>
                     </tr>
                   );
@@ -241,4 +266,3 @@ export const UsersTab: React.FC<UsersTabProps> = ({ userHook, onSelectUser }) =>
     </div>
   );
 };
-

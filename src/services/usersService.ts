@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { Database } from '../types/database.types';
+import type { Database, VerificationLevelEnum } from '../types/database.types';
 
 type User = Database['public']['Tables']['users']['Row'];
 
@@ -10,8 +10,10 @@ export const usersService = {
     search?: string;
     role?: 'cliente' | 'profissional';
     status?: User['status'];
+    verificationLevel?: VerificationLevelEnum;
+    isSuspended?: boolean;
   }) {
-    const { page, pageSize, search, role, status } = params;
+    const { page, pageSize, search, role, status, verificationLevel, isSuspended } = params;
     const startRange = (page - 1) * pageSize;
     const endRange = startRange + pageSize - 1;
 
@@ -22,15 +24,16 @@ export const usersService = {
     if (status) {
       query = query.eq('status', status);
     }
+    if (verificationLevel) {
+      query = query.eq('verification_level', verificationLevel);
+    }
+    if (isSuspended !== undefined && isSuspended !== null) {
+      query = query.eq('is_suspended', isSuspended);
+    }
     if (role) {
-      // In PostgreSQL, array containing is checked using cs.
-      // But since supabase-js does not have direct array operations in simple helper filters easily,
-      // we can use .contains('role_flags', [role]) or raw filter.
-      // Let's use contains:
       query = query.contains('role_flags', [role]);
     }
     if (search) {
-      // search in name or email or phone or CPF/CNPJ
       query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,document_hash.ilike.%${search}%`);
     }
 
@@ -41,7 +44,33 @@ export const usersService = {
     const { data, error, count } = await query;
 
     if (error) throw error;
-    return { data: data || [], totalCount: count || 0 };
+
+    const formattedData = (data || []).map((u: any) => {
+      const p = Array.isArray(u.profiles) ? u.profiles[0] : u.profiles;
+      const up = Array.isArray(u.user_profiles) ? u.user_profiles[0] : u.user_profiles;
+      return {
+        ...u,
+        verification_level: u.verification_level || p?.verification_level || up?.verification_level || 'none',
+        is_suspended: u.is_suspended ?? p?.is_suspended ?? up?.is_suspended ?? false,
+        verification_updated_at: u.verification_updated_at || p?.verification_updated_at || up?.verification_updated_at || null,
+      };
+    });
+
+    return { data: formattedData, totalCount: count || 0 };
+  },
+
+  async updateUserVerification(userId: string, verificationLevel?: VerificationLevelEnum, isSuspended?: boolean) {
+    const response = await fetch('/api/admin/users/update-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, verificationLevel, isSuspended }),
+    });
+
+    const resData = await response.json();
+    if (!response.ok || resData.error) {
+      throw new Error(resData.error || 'Falha ao atualizar dados de verificação do usuário.');
+    }
+    return resData.data;
   },
 
   // eslint-disable-next-line complexity
@@ -79,6 +108,12 @@ export const usersService = {
     if (detailsResult.error) throw detailsResult.error;
 
     const data = detailsResult.data as any;
+    const p = Array.isArray(data.profiles) ? data.profiles[0] : data.profiles;
+    const up = Array.isArray(data.user_profiles) ? data.user_profiles[0] : data.user_profiles;
+
+    data.verification_level = data.verification_level || p?.verification_level || up?.verification_level || 'none';
+    data.is_suspended = data.is_suspended ?? p?.is_suspended ?? up?.is_suspended ?? false;
+    data.verification_updated_at = data.verification_updated_at || p?.verification_updated_at || up?.verification_updated_at || null;
 
     // Auto-upsert default profile if it's missing or empty
     if (data && (!data.user_profiles || (Array.isArray(data.user_profiles) && data.user_profiles.length === 0))) {

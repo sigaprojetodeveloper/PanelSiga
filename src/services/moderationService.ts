@@ -1,3 +1,4 @@
+/* eslint-disable complexity */
 import { supabase } from '../lib/supabase';
 import { notificationsService } from './notificationsService';
 import type { Database } from '../types/database.types';

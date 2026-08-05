@@ -3,6 +3,7 @@ import React from 'react';
 import logoImg from '../../assets/logo.png';
 import {
   LayoutDashboard,
+  ShieldCheck,
   Users,
   Film,
   AlertTriangle,
@@ -17,6 +18,7 @@ import {
 
 export type DashboardTab =
   | 'overview'
+  | 'selo'
   | 'users'
   | 'works'
   | 'stories'
@@ -67,6 +69,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <LayoutDashboard size={18} />
           Visão Geral
+        </a>
+        <a
+          onClick={() => {
+            setActiveTab('selo');
+            setMobileSidebarOpen(false);
+          }}
+          className={`nav-item ${activeTab === 'selo' ? 'active' : ''}`}
+        >
+          <ShieldCheck size={18} />
+          Selo
         </a>
         <a
           onClick={() => {

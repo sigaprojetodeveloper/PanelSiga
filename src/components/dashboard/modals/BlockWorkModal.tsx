@@ -1,3 +1,4 @@
+/* eslint-disable complexity */
 import React, { useState, useEffect } from 'react';
 import { X, ShieldAlert, AlertTriangle } from 'lucide-react';
 import type { Work } from '../../../types/works.types';

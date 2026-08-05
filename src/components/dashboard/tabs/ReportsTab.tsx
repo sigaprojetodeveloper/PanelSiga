@@ -42,6 +42,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ reportHook, onOpenReport
               }}
             >
               <option value="">Todos Status</option>
+              <option value="pending">Pendentes</option>
               <option value="new">Novas</option>
               <option value="in_review">Em Análise</option>
               <option value="resolved">Resolvidas</option>
@@ -127,8 +128,8 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ reportHook, onOpenReport
                     </td>
                     <td>{new Date(rep.created_at).toLocaleDateString()}</td>
                     <td>
-                      <span className={`badge ${rep.status === 'new' ? 'badge-danger' : rep.status === 'in_review' ? 'badge-warning' : rep.status === 'resolved' ? 'badge-success' : 'badge-secondary'}`}>
-                        {rep.status === 'new' ? 'Nova' : rep.status === 'in_review' ? 'Em Análise' : rep.status === 'resolved' ? 'Resolvida' : 'Ignorada'}
+                      <span className={`badge ${rep.status === 'new' || rep.status === 'pending' ? 'badge-danger' : rep.status === 'in_review' ? 'badge-warning' : rep.status === 'resolved' ? 'badge-success' : 'badge-secondary'}`}>
+                        {rep.status === 'new' || rep.status === 'pending' ? 'Pendente' : rep.status === 'in_review' ? 'Em Análise' : rep.status === 'resolved' ? 'Resolvida' : 'Ignorada'}
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>

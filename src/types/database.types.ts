@@ -1,6 +1,28 @@
+export type VerificationLevelEnum = 'none' | 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond';
+
 export interface Database {
   public: {
     Tables: {
+      profiles: {
+        Row: {
+          id: string;
+          email: string | null;
+          name: string | null;
+          avatar_url: string | null;
+          bio: string | null;
+          verification_level: VerificationLevelEnum;
+          is_suspended: boolean;
+          verification_updated_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['profiles']['Row'], 'id' | 'created_at' | 'updated_at'> & {
+          verification_level?: VerificationLevelEnum;
+          is_suspended?: boolean;
+          verification_updated_at?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['profiles']['Row']>;
+      };
       users: {
         Row: {
           id: string;
@@ -13,6 +35,9 @@ export interface Database {
           nationality: string | null;
           marital_status: string | null;
           status: 'active' | 'blocked' | 'deleted';
+          verification_level?: VerificationLevelEnum;
+          is_suspended?: boolean;
+          verification_updated_at?: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -34,6 +59,9 @@ export interface Database {
           rating_avg: number;
           rating_count: number;
           is_available: boolean;
+          verification_level?: VerificationLevelEnum;
+          is_suspended?: boolean;
+          verification_updated_at?: string | null;
         };
         Insert: Partial<Database['public']['Tables']['user_profiles']['Row']>;
         Update: Partial<Database['public']['Tables']['user_profiles']['Row']>;
@@ -48,7 +76,7 @@ export interface Database {
           description: string | null;
           attachment_urls: string[] | null;
           allow_contact: boolean;
-          status: 'new' | 'in_review' | 'resolved' | 'ignored';
+          status: 'pending' | 'new' | 'in_review' | 'resolved' | 'ignored';
           notes: string | null; // internal admin notes
           created_at: string;
           updated_at: string;
