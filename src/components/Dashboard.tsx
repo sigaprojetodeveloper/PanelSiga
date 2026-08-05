@@ -1346,7 +1346,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
             if (daysMap[key]) {
               const isBanner = !!p.banner_id;
-              const isStory = !!p.story_channel_id;
+              const isStory = !!p.story_item_id || !!p.story_channel_id;
 
               if (isBanner && financialIncludeBanners) {
                 daysMap[key].banners += amount;
@@ -1370,15 +1370,19 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
             if (!cErr && contractsData) {
               contractsData.forEach((contract: any) => {
-                const paymentDateStr = contract.client_payment_date || contract.professional_payment_date || contract.updated_at;
+                const paymentDateStr = contract.client_payment_date || contract.professional_payment_date || contract.updated_at || contract.created_at;
                 const paymentDate = new Date(paymentDateStr);
                 const key = paymentDate.toISOString().split('T')[0];
 
                 let amount = 0;
                 if (contract.client_paid) {
                   amount += parseFloat(contract.client_payment_amount || 0);
-                } else if (contract.professional_paid) {
+                }
+                if (contract.professional_paid) {
                   amount += parseFloat(contract.professional_payment_amount || 0);
+                }
+                if (amount === 0 && (contract.client_paid || contract.professional_paid)) {
+                  amount = parseFloat(contract.work_price || 0) || contractValue || 49.90;
                 }
 
                 if (paymentDate >= start && paymentDate <= end) {
