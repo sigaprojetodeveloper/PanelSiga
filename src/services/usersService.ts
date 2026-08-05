@@ -3,6 +3,44 @@ import type { Database, VerificationLevelEnum } from '../types/database.types';
 
 type User = Database['public']['Tables']['users']['Row'];
 
+function getFirstProfile(profiles: any) {
+  return Array.isArray(profiles) ? profiles[0] : profiles;
+}
+
+function resolveVerificationLevel(u: any, p: any, up: any) {
+  if (u.verification_level) return u.verification_level;
+  if (p && p.verification_level) return p.verification_level;
+  if (up && up.verification_level) return up.verification_level;
+  return 'none';
+}
+
+function resolveIsSuspended(u: any, p: any, up: any) {
+  if (u.is_suspended !== undefined && u.is_suspended !== null) return Boolean(u.is_suspended);
+  if (p && p.is_suspended !== undefined) return Boolean(p.is_suspended);
+  if (up && up.is_suspended !== undefined) return Boolean(up.is_suspended);
+  return false;
+}
+
+function resolveVerificationUpdatedAt(u: any, p: any, up: any) {
+  if (u.verification_updated_at) return u.verification_updated_at;
+  if (p && p.verification_updated_at) return p.verification_updated_at;
+  if (up && up.verification_updated_at) return up.verification_updated_at;
+  return null;
+}
+
+function formatUserRecord(u: any) {
+  if (!u) return u;
+  const p = getFirstProfile(u.profiles);
+  const up = getFirstProfile(u.user_profiles);
+
+  return {
+    ...u,
+    verification_level: resolveVerificationLevel(u, p, up),
+    is_suspended: resolveIsSuspended(u, p, up),
+    verification_updated_at: resolveVerificationUpdatedAt(u, p, up),
+  };
+}
+
 export const usersService = {
   async getUsers(params: {
     page: number;
@@ -45,16 +83,7 @@ export const usersService = {
 
     if (error) throw error;
 
-    const formattedData = (data || []).map((u: any) => {
-      const p = Array.isArray(u.profiles) ? u.profiles[0] : u.profiles;
-      const up = Array.isArray(u.user_profiles) ? u.user_profiles[0] : u.user_profiles;
-      return {
-        ...u,
-        verification_level: u.verification_level || p?.verification_level || up?.verification_level || 'none',
-        is_suspended: u.is_suspended ?? p?.is_suspended ?? up?.is_suspended ?? false,
-        verification_updated_at: u.verification_updated_at || p?.verification_updated_at || up?.verification_updated_at || null,
-      };
-    });
+    const formattedData = (data || []).map(formatUserRecord);
 
     return { data: formattedData, totalCount: count || 0 };
   },
@@ -73,7 +102,6 @@ export const usersService = {
     return resData.data;
   },
 
-  // eslint-disable-next-line complexity
   async getUserDetails(userId: string) {
     const [detailsResult, createdWorksResult, assignedWorksResult] = await Promise.all([
       supabase
@@ -107,13 +135,7 @@ export const usersService = {
 
     if (detailsResult.error) throw detailsResult.error;
 
-    const data = detailsResult.data as any;
-    const p = Array.isArray(data.profiles) ? data.profiles[0] : data.profiles;
-    const up = Array.isArray(data.user_profiles) ? data.user_profiles[0] : data.user_profiles;
-
-    data.verification_level = data.verification_level || p?.verification_level || up?.verification_level || 'none';
-    data.is_suspended = data.is_suspended ?? p?.is_suspended ?? up?.is_suspended ?? false;
-    data.verification_updated_at = data.verification_updated_at || p?.verification_updated_at || up?.verification_updated_at || null;
+    const data = formatUserRecord(detailsResult.data as any);
 
     // Auto-upsert default profile if it's missing or empty
     if (data && (!data.user_profiles || (Array.isArray(data.user_profiles) && data.user_profiles.length === 0))) {
@@ -166,7 +188,6 @@ export const usersService = {
     bio?: string;
     avatar_url?: string | null;
   }) {
-    // Splits updates into user and profile tables
     const userUpdates: any = {};
     if (updates.name !== undefined) userUpdates.name = updates.name;
     if (updates.email !== undefined) userUpdates.email = updates.email;
