@@ -40,7 +40,6 @@ export const BannersTab: React.FC<BannersTabProps> = ({
               <option value="all">Todas as abrangências</option>
               <option value="national">Nacional</option>
               <option value="state">Estadual</option>
-              <option value="city">Municipal</option>
             </select>
           </div>
           {bannersHook.scopeFilter !== 'all' && (
@@ -62,7 +61,7 @@ export const BannersTab: React.FC<BannersTabProps> = ({
               </select>
             </div>
           )}
-          {bannersHook.scopeFilter !== 'all' && (bannersHook.scopeFilter === 'state' || bannersHook.scopeFilter === 'city') && bannersHook.countryFilter !== 'all' && (
+          {bannersHook.scopeFilter === 'state' && bannersHook.countryFilter !== 'all' && (
             <div className="filter-control">
               <label>Filtrar por Estado</label>
               <select
@@ -81,21 +80,6 @@ export const BannersTab: React.FC<BannersTabProps> = ({
                   ));
                 })()}
               </select>
-            </div>
-          )}
-          {bannersHook.scopeFilter === 'city' && (
-            <div className="filter-control">
-              <label>Buscar Cidade</label>
-              <input
-                type="text"
-                className="input-field"
-                placeholder="Ex: São Paulo"
-                style={{ height: '36px', fontSize: '14px' }}
-                value={bannersHook.cityFilter}
-                onChange={(e) => {
-                  bannersHook.setCityFilter(e.target.value);
-                }}
-              />
             </div>
           )}
         </div>

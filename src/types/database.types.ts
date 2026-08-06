@@ -203,7 +203,7 @@ export interface Database {
           status?: 'pending' | 'awaiting_payment' | 'scheduled' | 'active' | 'rejected' | 'expired' | 'deactivated' | 'deleted';
           initialization_date: string;
           expiration_date: string;
-          scope: 'global' | 'national' | 'state' | 'city';
+          scope: 'national' | 'state';
           country: string | null;
           state: string | null;
           city: string | null;

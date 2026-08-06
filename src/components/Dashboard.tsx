@@ -1042,7 +1042,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [bannerInitialization, setBannerInitialization] = useState('');
   const [bannerExpiration, setBannerExpiration] = useState('');
   const [bannerAspectWarning, setBannerAspectWarning] = useState(false);
-  const [bannerScope, setBannerScope] = useState<'national' | 'state' | 'city'>('national');
+  const [bannerScope, setBannerScope] = useState<'national' | 'state'>('national');
   const [bannerCountry, setBannerCountry] = useState('Brazil');
   const [bannerState, setBannerState] = useState('');
   const [bannerCity, setBannerCity] = useState('');
@@ -1952,7 +1952,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setBannerInitialization(banner.initialization_date || getTodayStr());
     setBannerExpiration(banner.expiration_date);
     setBannerAspectWarning(false);
-    setBannerScope(banner.scope || 'national');
+    setBannerScope(banner.scope === 'state' ? 'state' : 'national');
     setBannerCountry(banner.country || 'Brazil');
     setBannerState(banner.state || '');
     setBannerCity(banner.city || '');
@@ -2102,8 +2102,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
         id: editBannerId || undefined,
         scope: bannerScope,
         country: bannerCountry,
-        state: (bannerScope === 'state' || bannerScope === 'city') ? bannerState : null,
-        city: bannerScope === 'city' ? bannerCity : null,
+        state: bannerScope === 'state' ? bannerState : null,
+        city: null,
         initialization_date: bannerInitialization,
         expiration_date: bannerExpiration
       });
@@ -2135,8 +2135,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
         expiration_date: bannerExpiration,
         scope: bannerScope,
         country: bannerCountry || null,
-        state: (bannerScope === 'state' || bannerScope === 'city') ? bannerState || null : null,
-        city: bannerScope === 'city' ? bannerCity || null : null
+        state: bannerScope === 'state' ? bannerState || null : null,
+        city: null
       };
 
       if (editBannerId) {
@@ -3838,19 +3838,16 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     className="select-field"
                     value={bannerScope}
                     onChange={(e) => {
-                      const val = e.target.value as any;
+                      const val = e.target.value as 'national' | 'state';
                       setBannerScope(val);
                       if (val === 'national') {
                         setBannerState('');
-                        setBannerCity('');
-                      } else if (val === 'state') {
                         setBannerCity('');
                       }
                     }}
                   >
                     <option value="national">Nacional</option>
                     <option value="state">Estadual</option>
-                    <option value="city">Municipal</option>
                   </select>
                 </div>
 
@@ -3874,52 +3871,27 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                 </div>
               </div>
 
-              {(bannerScope === 'state' || bannerScope === 'city') && (
-                <div className="grid-2">
-                  <div className="form-group">
-                    <label>Estado</label>
-                    <select
-                      className="select-field"
-                      value={bannerState}
-                      onChange={(e) => {
-                        setBannerState(e.target.value);
-                        setBannerCity('');
-                      }}
-                      required
-                    >
-                      <option value="">Selecione o Estado</option>
-                      {(() => {
-                        const selectedCountryObj = Country.getAllCountries().find(c => c.name === bannerCountry);
-                        const states = selectedCountryObj ? State.getStatesOfCountry(selectedCountryObj.isoCode) : [];
-                        return states.map((s) => (
-                          <option key={s.isoCode} value={s.isoCode}>{s.name} ({s.isoCode})</option>
-                        ));
-                      })()}
-                    </select>
-                  </div>
-
-                  {bannerScope === 'city' && (
-                    <div className="form-group">
-                      <label>Cidade</label>
-                      <select
-                        className="select-field"
-                        value={bannerCity}
-                        onChange={(e) => setBannerCity(e.target.value)}
-                        required
-                      >
-                        <option value="">Selecione a Cidade</option>
-                        {(() => {
-                          const selectedCountryObj = Country.getAllCountries().find(c => c.name === bannerCountry);
-                          const states = selectedCountryObj ? State.getStatesOfCountry(selectedCountryObj.isoCode) : [];
-                          const selectedStateObj = states.find(s => s.isoCode === bannerState);
-                          const cities = (selectedCountryObj && selectedStateObj) ? City.getCitiesOfState(selectedCountryObj.isoCode, selectedStateObj.isoCode) : [];
-                          return cities.map((c) => (
-                            <option key={c.name} value={c.name}>{c.name}</option>
-                          ));
-                        })()}
-                      </select>
-                    </div>
-                  )}
+              {bannerScope === 'state' && (
+                <div className="form-group">
+                  <label>Estado</label>
+                  <select
+                    className="select-field"
+                    value={bannerState}
+                    onChange={(e) => {
+                      setBannerState(e.target.value);
+                      setBannerCity('');
+                    }}
+                    required
+                  >
+                    <option value="">Selecione o Estado</option>
+                    {(() => {
+                      const selectedCountryObj = Country.getAllCountries().find(c => c.name === bannerCountry);
+                      const states = selectedCountryObj ? State.getStatesOfCountry(selectedCountryObj.isoCode) : [];
+                      return states.map((s) => (
+                        <option key={s.isoCode} value={s.isoCode}>{s.name} ({s.isoCode})</option>
+                      ));
+                    })()}
+                  </select>
                 </div>
               )}
 
