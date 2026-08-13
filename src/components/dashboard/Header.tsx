@@ -16,6 +16,8 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setMobileSidebarOpen 
       <div className="header-title">
         <h2>
           {activeTab === 'overview' && 'Visão Geral'}
+          {activeTab === 'stores' && 'Empresas'}
+          {activeTab === 'selo' && 'Usuários'}
           {activeTab === 'users' && 'Usuários'}
           {activeTab === 'works' && 'Obras'}
           {activeTab === 'stories' && 'Stories'}

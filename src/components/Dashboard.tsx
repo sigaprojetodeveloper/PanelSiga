@@ -31,7 +31,8 @@ import { ReportsTab } from './dashboard/tabs/ReportsTab';
 import { BannersTab } from './dashboard/tabs/BannersTab';
 import { ModerationTab } from './dashboard/tabs/ModerationTab';
 import { FinancialTab } from './dashboard/tabs/FinancialTab';
-import { SettingsTab } from './dashboard/tabs/SettingsTab';
+import { SettingsTab, SettingsSubTab } from './dashboard/tabs/SettingsTab';
+import { StoresTab } from './dashboard/tabs/StoresTab';
 import { ReportDetailsModal } from './dashboard/modals/ReportDetailsModal';
 import {
   LayoutDashboard,
@@ -713,7 +714,7 @@ interface DashboardProps {
 
 export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const { success, error, warning, info } = useToast();
-  const [activeTab, setActiveTab] = useState<'overview' | 'selo' | 'users' | 'works' | 'stories' | 'reports' | 'settings' | 'banners' | 'moderation' | 'financial'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'selo' | 'users' | 'works' | 'stories' | 'reports' | 'settings' | 'banners' | 'moderation' | 'financial' | 'stores'>('overview');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Custom Hooks & Notification Settings
@@ -894,7 +895,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [rejectionText, setRejectionText] = useState('');
 
   // Settings sub-tab state
-  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'banners' | 'stories' | 'contracts' | 'admins' | 'requests'>('general');
+  const [settingsSubTab, setSettingsSubTab] = useState<SettingsSubTab>('general');
 
   const currentUserEmail = adminUsername;
 
@@ -2468,6 +2469,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               onNavigate={setActiveTab}
             />
           )}
+
+          {activeTab === 'stores' && <StoresTab />}
 
           {activeTab === 'selo' && (
             <SeloTab

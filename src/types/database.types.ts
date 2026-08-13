@@ -253,6 +253,98 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['ad_pricing']['Row'], 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Database['public']['Tables']['ad_pricing']['Row']>;
       };
+      enterprises: {
+        Row: {
+          id: string;
+          user_id: string;
+          nome_fantasia: string;
+          razao_social: string | null;
+          cnpj: string | null;
+          logo_url: string | null;
+          banner_url: string | null;
+          category: string | null;
+          description: string | null;
+          whatsapp: string | null;
+          instagram: string | null;
+          website: string | null;
+          tier: 'LITE' | 'PREMIUM';
+          status: 'DRAFT' | 'PENDING_PAYMENT' | 'ACTIVE' | 'EXPIRED' | 'BLOCKED';
+          blocked_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['enterprises']['Row'], 'id' | 'created_at' | 'updated_at'> & {
+          tier?: 'LITE' | 'PREMIUM';
+          status?: 'DRAFT' | 'PENDING_PAYMENT' | 'ACTIVE' | 'EXPIRED' | 'BLOCKED';
+          blocked_reason?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['enterprises']['Row']>;
+      };
+      enterprise_addresses: {
+        Row: {
+          id: string;
+          enterprise_id: string;
+          street: string;
+          number: string | null;
+          complement: string | null;
+          district: string | null;
+          city: string;
+          state: string;
+          zip_code: string | null;
+          latitude: number | null;
+          longitude: number | null;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['enterprise_addresses']['Row'], 'id' | 'created_at'>;
+        Update: Partial<Database['public']['Tables']['enterprise_addresses']['Row']>;
+      };
+      enterprise_subscriptions: {
+        Row: {
+          id: string;
+          enterprise_id: string;
+          stripe_intent_id: string | null;
+          amount_paid: number;
+          status: string;
+          billing_breakdown: any;
+          starts_at: string;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['enterprise_subscriptions']['Row'], 'id' | 'created_at'>;
+        Update: Partial<Database['public']['Tables']['enterprise_subscriptions']['Row']>;
+      };
+      city_pricings: {
+        Row: {
+          id: string;
+          is_default: boolean;
+          city_name: string;
+          state: string;
+          price_lite: number;
+          price_premium: number;
+          tax_extra_lite: number;
+          tax_extra_premium: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['city_pricings']['Row'], 'id' | 'created_at' | 'updated_at'> & {
+          is_default?: boolean;
+        };
+        Update: Partial<Database['public']['Tables']['city_pricings']['Row']>;
+      };
+      city_volume_discounts: {
+        Row: {
+          id: string;
+          min_distinct_cities: number;
+          discount_percentage: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['city_volume_discounts']['Row'], 'id' | 'created_at' | 'updated_at'> & {
+          is_active?: boolean;
+        };
+        Update: Partial<Database['public']['Tables']['city_volume_discounts']['Row']>;
+      };
     };
   };
 }

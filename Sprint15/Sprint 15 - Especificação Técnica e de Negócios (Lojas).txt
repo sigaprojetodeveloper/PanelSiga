@@ -1,0 +1,110 @@
+﻿Sprint 15 - Especificação Técnica e de Negócios: Módulo de Lojas
+Data de Documentação: Agosto de 2026
+Este documento formaliza a especificação completa para o desenvolvimento do Módulo de Divulgação de Lojas (Sprint 15). Ele serve como um guia definitivo tanto para o entendimento das regras de negócios pelo cliente e stakeholders, quanto como manual técnico de implementação para as equipes de engenharia (Frontend, Backend e Mobile).
+1. Visão Geral e Objetivo do Produto
+O Módulo de Divulgação de Lojas transforma o aplicativo em uma vitrine digital segmentada por geolocalização. Seu modelo de negócio é baseado em venda de assinaturas anuais (Planos Lite e Premium) para comerciantes locais.
+O objetivo é fornecer uma ferramenta de conversão eficiente para o lojista e uma busca rápida e relevante para o consumidor final, garantindo que a plataforma escale sua monetização de maneira flexível e automatizada.
+2. Experiência do Consumidor (Aplicativo Público)
+Esta seção detalha as interfaces acessadas pelo usuário final que está buscando por produtos, serviços ou estabelecimentos em sua região.
+2.1. Tela Principal: Feed de Lojas
+O Feed é a vitrine principal. Ele deve carregar rapidamente e trazer os dados mais relevantes com base na localização do usuário.
+* Busca e Filtro de Localização: No topo da tela, uma barra de busca por texto livre (Nome da Loja). Integrado a um seletor de Cidades, que por padrão utiliza o GPS do dispositivo (coordenadas convertidas para cidade via SDK) para mostrar lojas locais, mas permite alteração manual.
+* Algoritmo de Ordenação: A listagem utiliza paginação (10 lojas por requisição). A prioridade absoluta no topo é das lojas de plano Premium da cidade selecionada, seguidas pelas lojas de plano Lite.
+* Desempate e Rotatividade: Para evitar que a mesma loja Premium seja eternamente a número 1, a ordenação secundária utiliza um embaralhamento com seed diário, e avalia a data de atualização mais recente do perfil.
+* Diferenciação de Cards:
+   * Card Premium: Borda em destaque, selo "Premium/Destaque" sobreposto, suporte à exibição de banner horizontal ou imagem de capa em destaque acima do nome da loja.
+   * Card Lite: Formato compacto focado no essencial (Logotipo redondo/quadrado, Nome Fantasia, Categoria, Bairro/Distância).
+2.2. Tela de Detalhes da Loja (Vitrine de Conversão)
+Acessada ao clicar em um card no Feed. Esta tela é o "mini-site" do estabelecimento, desenhada estritamente para conversão e engajamento.
+* Identidade Visual e Galeria: O topo exibe o logotipo e um carrossel de fotos (ou banner promocional) gerido pelo lojista, fortalecendo o branding da marca.
+* Barra de Ações Rápidas: Botões de alta conversão estrategicamente posicionados abaixo do nome da loja:
+   * WhatsApp: Abre o app de mensagens usando deeplink oficial (wa.me/numero).
+   * Ligar: Aciona o discador nativo (tel://numero).
+   * Site / Instagram: Abertura em navegador interno (WebView) ou redirecionamento para o app do Instagram.
+   * Compartilhar: Aciona o Share Sheet nativo do Android/iOS para compartilhamento do perfil orgânico.
+* Listagem de Endereços e Mapas: Exibição em lista de todos os endereços (filiais) vinculados à loja. Cada item possui um botão "Abrir no Mapa", que passa as coordenadas de latitude/longitude (Lat/Lng) diretamente para o Google Maps ou Waze.
+* Dados Institucionais: Bloco contendo Razão Social, CNPJ (opcional), categoria do segmento e descrição do negócio.
+3. Experiência do Lojista (Painel de Gestão no App)
+O aplicativo fornecerá uma área logada exclusiva para o anunciante operar e monitorar a saúde de suas lojas.
+3.1. Tela: Minhas Lojas
+Dashboard administrativo do próprio usuário.
+* Lista paginada exibindo todas as lojas sob posse do usuário logado.
+* Sistema de Badges de Status: Uso de cores semânticas para comunicar o estado da assinatura anual:
+   * Verde (Ativa): Mostra a data de validade futura.
+   * Amarelo (Aguardando Pagamento): Checkout pendente.
+   * Vermelho (Expirada): Prazo venceu, botão de "Renovar" em destaque.
+   * Cinza/Preto (Bloqueada): Acesso restrito por infração de moderação.
+3.2. Tela: Nova Loja / Edição
+Formulário de cadastro em etapas (Wizard).
+* Dados Básicos: Nome Fantasia (Obrigatório), Razão Social, WhatsApp, Instagram e Website.
+* Upload de Arquivos: Seletores para Logo e Capa. O backend deve otimizar as imagens e converter para WebP/JPEG antes de salvar no Storage/S3.
+* Apresentação de Planos (Upsell): Card interativo e expansível mostrando um comparativo visual entre Lite e Premium, focando em ranqueamento superior e design diferenciado.
+3.3. Modal de Endereços Inteligente
+A localização é o núcleo do módulo, portando requer uma ferramenta robusta para evitar digitação livre propensa a erros.
+* O modal aciona uma API Global de Geocoding (ex: SDK do Google Places).
+* O usuário digita o nome do local ou CEP e o sistema autocompleta.
+* O backend salva o logradouro completo (formatted_address), Cidade (city), Estado e os pontos geográficos exatos (Latitude e Longitude).
+* A loja deve conter pelo menos 1 (um) endereço para que o usuário possa avançar para o pagamento.
+3.4. Tela: Checkout e Pagamento Anual
+Exibe o orçamento detalhado antes de efetivar a cobrança no Stripe.
+* Resumo Financeiro Detalhado: O painel mostra o plano escolhido e uma lista da cobrança discriminada por cidade/endereço, evidenciando os descontos por filiais adicionais na mesma localidade.
+* Aviso de Vigência: Texto explícito: "Sua loja ficará disponível por 1 ano (365 dias) a partir da confirmação do pagamento".
+* Gateway Integrado: Botão de pagar via Pix (geração de QR Code/Copia e Cola dinâmico) ou Cartão de Crédito via Stripe Payment Element.
+4. Painel de Administração (Backoffice Web)
+Plataforma para acesso exclusivo da equipe interna da empresa gestora do app.
+4.1. Aba: Gestão de Lojas e Moderação
+Ferramenta de SAC, Auditoria e Segurança.
+* Tabela de Gestão: Colunas: ID, Proprietário, Nome Fantasia, Plano (Tier), Quantidade de Endereços, Status, Data de Validade.
+* Módulo de Bloqueio: Ao detectar fraudes ou imagens inapropriadas, o administrador aciona a ação de "Bloquear". Um modal requer a digitação de um motivo obrigatório. Uma vez confirmado, o backend dispara um e-mail para o lojista e a loja imediatamente some do Feed público.
+4.2. Aba: Configurações de Preços e Monetização
+Interface que dita as regras do cálculo dinâmico de cobrança do aplicativo.
+* O admin cadastra "Exceções Regionais" escolhendo Cidade e Estado.
+* Para cada localidade, ele insere quatro valores em moeda (R$):
+   * Preço Base Lite (Por ano)
+   * Preço Base Premium (Por ano)
+   * Taxa para Endereço Extra - Lite (Valor fixo por filial na mesma cidade)
+   * Taxa para Endereço Extra - Premium (Valor fixo por filial na mesma cidade)
+* Fallback Global: O admin deve definir um preço padrão nacional que o sistema utilizará caso uma loja seja cadastrada em uma cidade do interior que não conste na tabela customizada.
+5. Regras de Negócio e Arquitetura Técnica
+5.1. Máquina de Estados da Loja (Ciclo de Vida)
+O fluxo define os estados permitidos na tabela de Lojas (Stores) do Banco de Dados.
+[ RASCUNHO ] ---------> (Inicia Checkout) ---------> [ AGUARDANDO_PAGAMENTO ]
+                                                              |
+                                                              | (Stripe Webhook Confirma)
+                                                              v
+                                                          [ ATIVA ]  <--- (Validade: 365 Dias)
+                                                              |
+                                                              | (Tempo Esgotado)
+                                                              v
+                                                        [ EXPIRADA ]
+========================================================================
+* Ação do Administrador em qualquer ponto do fluxo muda para: [ BLOQUEADA ]
+
+5.2. Algoritmo de Precificação para Múltiplos Endereços
+O preço não é fixo. Ele é composto pelo custo base da cidade e adicionais caso o cliente decida anunciar várias filiais. A lógica processada pelo Backend na rota GET /stores/{id}/quote é:
+Custo Total = Σ [ PreçoPlano(Cidade) + (Quantidade_Enderecos - 1) × TaxaExtra(Cidade) ]
+Cenário de Exemplo (Plano Premium):
+* Preço Base Premium (São Paulo / SP): R$ 150,00
+* Taxa para Endereço Extra Premium (São Paulo / SP): R$ 30,00
+* Cliente cadastra 3 endereços em SP.
+* Cálculo: R$ 150,00 (1º endereço) + (2 endereços extras × R$ 30,00) = R$ 210,00 Anuais.
+5.3. Integrações, APIs e Segurança
+* Anti-Fraude de Preços: O App mobile nunca envia o valor do pagamento para a API. O front-end envia apenas o ID da loja. O Backend calcula o valor na hora, consulta as configurações de preço e gera o token (PaymentIntent) do Stripe.
+* Sincronização Assíncrona via Webhooks: O aplicativo não depende do usuário esperar na tela de sucesso. O Stripe envia um Webhook (evento payment_intent.succeeded) para o backend do sistema. O backend atualiza o status para ATIVA e define a expires_at = NOW() + 1 YEAR. Isso previne falhas de internet em dispositivos móveis.
+6. Dicionário de Dados Resumido (Entidades Principais)
+Entidade (Tabela)
+	Descrição
+	Campos Críticos e Relacionamentos
+ 
+	Stores (Lojas)
+	Registro central do anúncio do lojista.
+	id, user_id (Owner), nome_fantasia, tier (LITE|PREMIUM), status (ENUM estados), blocked_reason.
+	Store_Addresses
+	Múltiplos endereços atrelados a uma única loja.
+	id, store_id (FK), city, state, formatted_address, lat, lng.
+	Store_Subscriptions
+	Histórico de assinaturas e pagamentos da loja.
+	id, store_id (FK), stripe_intent_id, amount_paid, starts_at, expires_at.
+	City_Pricings
+	Configuração gerencial de preços por cidade (Admin).
+	id, city_name, state, price_lite, price_premium, tax_extra_lite, tax_extra_premium.

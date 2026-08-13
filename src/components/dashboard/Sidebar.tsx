@@ -13,6 +13,7 @@ import {
   Bell,
   Award,
   Hammer,
+  Building2,
   X
 } from 'lucide-react';
 
@@ -26,7 +27,8 @@ export type DashboardTab =
   | 'settings'
   | 'banners'
   | 'moderation'
-  | 'financial';
+  | 'financial'
+  | 'stores';
 
 interface SidebarProps {
   activeTab: DashboardTab;
@@ -72,13 +74,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </a>
         <a
           onClick={() => {
-            setActiveTab('selo');
+            setActiveTab('users');
             setMobileSidebarOpen(false);
           }}
-          className={`nav-item ${activeTab === 'selo' ? 'active' : ''}`}
+          className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
         >
-          <ShieldCheck size={18} />
-          Selo
+          <Users size={18} />
+          Usuários
         </a>
         <a
           onClick={() => {
@@ -112,13 +114,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </a>
         <a
           onClick={() => {
-            setActiveTab('users');
+            setActiveTab('stores');
             setMobileSidebarOpen(false);
           }}
-          className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
+          className={`nav-item ${activeTab === 'stores' ? 'active' : ''}`}
         >
-          <Users size={18} />
-          Usuários
+          <Building2 size={18} />
+          Lojas
         </a>
         <a
           onClick={() => {
