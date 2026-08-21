@@ -794,7 +794,8 @@ h1, h2, h3, h4, h5, h6 {
   overflow: hidden;
 }
 
-.media-container:hover .media-hover-overlay {
+.media-container:hover .media-hover-overlay,
+.logo-hover-container:hover .logo-hover-overlay {
   opacity: 1 !important;
 }
 

@@ -1,6 +1,7 @@
 /* eslint-disable complexity */
 import { supabase } from '../lib/supabase';
 import type { Database } from '../types/database.types';
+import { notificationsService } from './notificationsService';
 
 export type Enterprise = Database['public']['Tables']['enterprises']['Row'];
 export type EnterpriseAddress = Database['public']['Tables']['enterprise_addresses']['Row'];
@@ -19,6 +20,10 @@ export interface GetAdminEnterprisesParams {
 export interface EnterpriseWithDetails extends Enterprise {
   owner_email?: string | null;
   owner_name?: string | null;
+  owner_avatar_url?: string | null;
+  owner_verification_level?: string | null;
+  owner_is_suspended?: boolean | null;
+  owner_phone?: string | null;
   enterprise_addresses?: EnterpriseAddress[];
   enterprise_subscriptions?: EnterpriseSubscription[];
 }
@@ -79,25 +84,37 @@ export const enterprisesService = {
       });
     }
 
-    // Try to enrich owner details from profiles or users table
+    // Try to enrich owner details from profiles and users tables
     const userIds = Array.from(new Set(enterprisesList.map(e => e.user_id).filter(Boolean)));
     if (userIds.length > 0) {
       try {
-        const { data: profiles } = await (supabase.from('profiles') as any)
-          .select('id, email, name')
-          .in('id', userIds);
+        const [{ data: usersList }, { data: profilesList }] = await Promise.all([
+          (supabase.from('users') as any)
+            .select('id, email, name, phone, verification_level, is_suspended, user_profiles(*)')
+            .in('id', userIds),
+          (supabase.from('profiles') as any)
+            .select('id, email, name, avatar_url, verification_level, is_suspended')
+            .in('id', userIds)
+        ]);
 
-        if (profiles) {
-          const profileMap = new Map(profiles.map((p: any) => [p.id, p]));
-          enterprisesList = enterprisesList.map(ent => {
-            const prof: any = profileMap.get(ent.user_id);
-            return {
-              ...ent,
-              owner_email: prof?.email || ent.whatsapp || null,
-              owner_name: prof?.name || null
-            };
-          });
-        }
+        const userMap = new Map((usersList || []).map((u: any) => [u.id, u]));
+        const profileMap = new Map((profilesList || []).map((p: any) => [p.id, p]));
+
+        enterprisesList = enterprisesList.map(ent => {
+          const u: any = userMap.get(ent.user_id);
+          const p: any = profileMap.get(ent.user_id);
+          const up = u?.user_profiles ? (Array.isArray(u.user_profiles) ? u.user_profiles[0] : u.user_profiles) : null;
+
+          return {
+            ...ent,
+            owner_email: u?.email || p?.email || ent.email_fiscal || null,
+            owner_name: u?.name || p?.name || null,
+            owner_avatar_url: up?.avatar_url || p?.avatar_url || null,
+            owner_verification_level: u?.verification_level || p?.verification_level || up?.verification_level || 'none',
+            owner_is_suspended: Boolean(u?.is_suspended || p?.is_suspended || up?.is_suspended),
+            owner_phone: u?.phone || up?.whatsapp_phone || ent.phone || ent.whatsapp || null
+          };
+        });
       } catch (err) {
         console.warn('[enterprisesService] Aviso ao enriquecer perfis dos proprietários:', err);
       }
@@ -127,6 +144,21 @@ export const enterprisesService = {
     if (error) {
       console.error('[enterprisesService] Erro ao bloquear empresa:', error);
       throw error;
+    }
+
+    // Send in-app notification to the store owner
+    if (data.user_id) {
+      try {
+        await notificationsService.sendNotification({
+          userId: data.user_id,
+          title: `Seu anúncio "${data.nome_fantasia || 'da loja'}" foi bloqueado`,
+          body: `Motivo do bloqueio: ${reason.trim()}`,
+          type: 'store_blocked',
+          relatedId: enterpriseId
+        });
+      } catch (notifErr) {
+        console.error('[enterprisesService] Erro ao enviar notificação de bloqueio:', notifErr);
+      }
     }
 
     // Attempt to invoke Edge Function notification (with graceful catch)
@@ -177,6 +209,21 @@ export const enterprisesService = {
       throw error;
     }
 
+    // Send in-app notification to store owner on unblock
+    if (data.user_id) {
+      try {
+        await notificationsService.sendNotification({
+          userId: data.user_id,
+          title: `Seu anúncio "${data.nome_fantasia || 'da loja'}" foi reativado`,
+          body: `O anúncio da sua empresa foi reativado pelo suporte e está visível novamente.`,
+          type: 'store_unblocked',
+          relatedId: enterpriseId
+        });
+      } catch (notifErr) {
+        console.error('[enterprisesService] Erro ao enviar notificação de desbloqueio:', notifErr);
+      }
+    }
+
     return data;
   },
 
@@ -197,18 +244,32 @@ export const enterprisesService = {
 
     let ownerEmail: string | null = null;
     let ownerName: string | null = null;
+    let ownerAvatarUrl: string | null = null;
+    let ownerVerificationLevel: string | null = 'none';
+    let ownerIsSuspended: boolean = false;
+    let ownerPhone: string | null = null;
 
     if (data.user_id) {
       try {
-        const { data: prof } = await (supabase.from('profiles') as any)
-          .select('email, name')
-          .eq('id', data.user_id)
-          .maybeSingle();
+        const [{ data: userRecord }, { data: profileRecord }] = await Promise.all([
+          (supabase.from('users') as any)
+            .select('*, user_profiles(*)')
+            .eq('id', data.user_id)
+            .maybeSingle(),
+          (supabase.from('profiles') as any)
+            .select('*')
+            .eq('id', data.user_id)
+            .maybeSingle()
+        ]);
 
-        if (prof) {
-          ownerEmail = prof.email;
-          ownerName = prof.name;
-        }
+        const up = userRecord?.user_profiles ? (Array.isArray(userRecord.user_profiles) ? userRecord.user_profiles[0] : userRecord.user_profiles) : null;
+
+        ownerEmail = userRecord?.email || profileRecord?.email || data.email_fiscal || null;
+        ownerName = userRecord?.name || profileRecord?.name || null;
+        ownerAvatarUrl = up?.avatar_url || profileRecord?.avatar_url || null;
+        ownerVerificationLevel = userRecord?.verification_level || profileRecord?.verification_level || up?.verification_level || 'none';
+        ownerIsSuspended = Boolean(userRecord?.is_suspended || profileRecord?.is_suspended || up?.is_suspended);
+        ownerPhone = userRecord?.phone || up?.whatsapp_phone || data.phone || data.whatsapp || null;
       } catch (err) {
         console.warn('[enterprisesService] Aviso ao buscar perfil do proprietário:', err);
       }
@@ -217,7 +278,11 @@ export const enterprisesService = {
     return {
       ...data,
       owner_email: ownerEmail,
-      owner_name: ownerName
+      owner_name: ownerName,
+      owner_avatar_url: ownerAvatarUrl,
+      owner_verification_level: ownerVerificationLevel,
+      owner_is_suspended: ownerIsSuspended,
+      owner_phone: ownerPhone
     };
   }
 };
