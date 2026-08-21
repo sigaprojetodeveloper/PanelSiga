@@ -1,4 +1,4 @@
-/* eslint-disable complexity */
+/* eslint-disable complexity, @next/next/no-img-element */
 import React, { useState, useEffect } from 'react';
 import { X, FileText, ExternalLink, User } from 'lucide-react';
 import { translateTargetType } from '../utils';
@@ -27,7 +27,9 @@ export const ReportDetailsModal: React.FC<ReportDetailsModalProps> = ({
   onOpenWork
 }) => {
   const [reporterInfo, setReporterInfo] = useState<{ id: string; name: string; email: string; avatar_url: string | null } | null>(null);
+  const [targetUserInfo, setTargetUserInfo] = useState<{ id: string; name: string; email: string; avatar_url: string | null } | null>(null);
   const [loadingReporter, setLoadingReporter] = useState(false);
+  const [loadingTargetUser, setLoadingTargetUser] = useState(false);
   const [isProcessingAction, setIsProcessingAction] = useState(false);
 
   useEffect(() => {
@@ -40,7 +42,24 @@ export const ReportDetailsModal: React.FC<ReportDetailsModalProps> = ({
     } else {
       setReporterInfo(null);
     }
-  }, [selectedReport?.reporter_id]);
+
+    if (selectedReport?.target_id) {
+      setLoadingTargetUser(true);
+      reportsService.getTargetOwnerUserId(selectedReport.target_type, selectedReport.target_id)
+        .then(ownerId => {
+          const userIdToFetch = ownerId || (selectedReport.target_type === 'user' ? selectedReport.target_id : null);
+          if (userIdToFetch) {
+            return reportsService.getReporterDetails(userIdToFetch);
+          }
+          return null;
+        })
+        .then(res => setTargetUserInfo(res))
+        .catch(() => setTargetUserInfo(null))
+        .finally(() => setLoadingTargetUser(false));
+    } else {
+      setTargetUserInfo(null);
+    }
+  }, [selectedReport?.reporter_id, selectedReport?.target_id, selectedReport?.target_type]);
 
   if (!isOpen || !selectedReport) return null;
 
@@ -144,47 +163,82 @@ export const ReportDetailsModal: React.FC<ReportDetailsModalProps> = ({
             <span className="value">{selectedReport.allow_contact ? 'Sim ✅' : 'Não ❌'}</span>
           </div>
 
-          {/* Alvo da Denúncia */}
+          {/* Usuário Alvo da Denúncia (Card idêntico ao Denunciante) */}
           <div className="modal-field" style={{ gridColumn: '1 / -1' }}>
             <span className="label">Alvo: {targetTypeName}</span>
-            <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)' }}>
-              <div>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block' }}>Tipo: {targetTypeName}</span>
-                <span style={{ fontFamily: 'monospace', fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                  ID: {selectedReport.target_id}
-                </span>
-              </div>
-              <div>
-                {isUserTarget && onOpenUser && selectedReport.target_id && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                    onClick={() => {
-                      onClose();
-                      onOpenUser(selectedReport.target_id);
-                    }}
-                  >
-                    <ExternalLink size={14} /> Abrir Perfil
-                  </button>
-                )}
-                {isWorkTarget && onOpenWork && selectedReport.target_id && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                    onClick={() => {
-                      onClose();
-                      onOpenWork(selectedReport.target_id);
-                    }}
-                  >
-                    <ExternalLink size={14} /> Abrir Obra
-                  </button>
-                )}
-                {!isUserTarget && !isWorkTarget && (
-                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>ID do Alvo: {selectedReport.target_id}</span>
-                )}
-              </div>
+            <div
+              onClick={() => {
+                const targetUserId = targetUserInfo?.id || (isUserTarget ? selectedReport.target_id : null);
+                if (onOpenUser && targetUserId) {
+                  onClose();
+                  onOpenUser(targetUserId);
+                }
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '10px 14px',
+                backgroundColor: 'var(--bg-app)',
+                border: '1px solid var(--border-light)',
+                borderRadius: 'var(--radius-sm)',
+                cursor: (onOpenUser && (targetUserInfo?.id || isUserTarget)) ? 'pointer' : 'default',
+                marginTop: '6px',
+                transition: 'all 0.2s ease',
+              }}
+              title={onOpenUser ? 'Clique para abrir o perfil do usuário alvo' : undefined}
+            >
+              {loadingTargetUser ? (
+                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Carregando dados do usuário alvo...</span>
+              ) : (
+                <>
+                  <div style={{ width: '42px', height: '42px', borderRadius: '50%', overflow: 'hidden', backgroundColor: 'var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {targetUserInfo?.avatar_url ? (
+                      <img src={targetUserInfo.avatar_url} alt={targetUserInfo.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <User size={22} style={{ color: 'var(--text-muted)' }} />
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                    <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-main)' }}>
+                      {targetUserInfo?.name || (isUserTarget ? 'Usuário Alvo' : `Alvo (${targetTypeName})`)}
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                      {targetUserInfo?.email || `ID: ${selectedReport.target_id}`}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    {(targetUserInfo?.id || isUserTarget) && onOpenUser && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onClose();
+                          onOpenUser(targetUserInfo?.id || selectedReport.target_id);
+                        }}
+                      >
+                        <ExternalLink size={12} /> Ver Perfil
+                      </button>
+                    )}
+                    {isWorkTarget && onOpenWork && selectedReport.target_id && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onClose();
+                          onOpenWork(selectedReport.target_id);
+                        }}
+                      >
+                        <ExternalLink size={12} /> Ver Obra
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

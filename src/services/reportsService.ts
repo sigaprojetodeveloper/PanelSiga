@@ -1,3 +1,4 @@
+/* eslint-disable complexity */
 import { supabase } from '../lib/supabase';
 import type { Database } from '../types/database.types';
 
@@ -45,44 +46,65 @@ export const reportsService = {
   },
 
   async updateReportStatus(reportId: string, status: Report['status'], notes?: string) {
-    const updates: Partial<Report> = { 
+    const updates: any = { 
       status, 
       updated_at: new Date().toISOString() 
     };
-    if (notes !== undefined) {
+
+    if (notes !== undefined && notes !== null && notes !== '') {
       updates.notes = notes;
     }
 
-    const { data, error } = await (supabase.from('reports') as any)
+    let { data, error } = await (supabase.from('reports') as any)
       .update(updates)
       .eq('id', reportId)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) throw error;
+    // Fallback gracioso se a coluna 'notes' não existir no schema do banco
+    if (error && (error.message?.includes("'notes'") || error.details?.includes("'notes'") || error.code === 'PGRST204')) {
+      console.warn('[reportsService] Coluna "notes" não encontrada na tabela "reports". Atualizando apenas status.');
+      delete updates.notes;
+
+      const retry = await (supabase.from('reports') as any)
+        .update(updates)
+        .eq('id', reportId)
+        .select()
+        .maybeSingle();
+
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      console.error('[reportsService] Erro ao atualizar status da denúncia:', error);
+      throw error;
+    }
+
     return data;
   },
 
   async getReporterDetails(reporterId: string) {
     if (!reporterId) return null;
-    const { data: user } = await (supabase.from('users') as any)
-      .select('id, name, email')
-      .eq('id', reporterId)
-      .maybeSingle();
+    try {
+      const [{ data: user }, { data: profile }, { data: legacyProfile }] = await Promise.all([
+        (supabase.from('users') as any).select('id, name, email').eq('id', reporterId).maybeSingle(),
+        (supabase.from('user_profiles') as any).select('avatar_url').eq('user_id', reporterId).maybeSingle(),
+        (supabase.from('profiles') as any).select('name, email, avatar_url').eq('id', reporterId).maybeSingle()
+      ]);
 
-    if (!user) return null;
+      if (!user && !legacyProfile) return null;
 
-    const { data: profile } = await (supabase.from('user_profiles') as any)
-      .select('avatar_url')
-      .eq('user_id', reporterId)
-      .maybeSingle();
-
-    return {
-      id: (user as any).id,
-      name: (user as any).name || 'Usuário Sem Nome',
-      email: (user as any).email || '',
-      avatar_url: (profile as any)?.avatar_url || null,
-    };
+      return {
+        id: reporterId,
+        name: user?.name || legacyProfile?.name || 'Usuário Sem Nome',
+        email: user?.email || legacyProfile?.email || '',
+        avatar_url: profile?.avatar_url || legacyProfile?.avatar_url || null,
+      };
+    } catch (err) {
+      console.warn('[reportsService] Erro ao buscar detalhes do usuário:', err);
+      return null;
+    }
   },
 
   async getTargetOwnerUserId(targetType: string, targetId: string): Promise<string | null> {

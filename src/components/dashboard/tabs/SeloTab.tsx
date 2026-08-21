@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import React from 'react';
 import { Search } from 'lucide-react';
 import { VerificationBadgeAdmin, LEVEL_CONFIG } from '../../users/VerificationBadgeAdmin';
