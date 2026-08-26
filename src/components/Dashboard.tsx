@@ -1271,6 +1271,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [newUsersCount, setNewUsersCount] = useState<number | null>(null);
   const [newWorksCount, setNewWorksCount] = useState<number | null>(null);
   const [newContractsCount, setNewContractsCount] = useState<number | null>(null);
+  const [newStoresCount, setNewStoresCount] = useState<number | null>(null);
   const [contractValue, setContractValue] = useState<number>(49.90);
 
   useEffect(() => {
@@ -1294,14 +1295,16 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const [financialIncludeBanners, setFinancialIncludeBanners] = useState(true);
   const [financialIncludeStories, setFinancialIncludeStories] = useState(true);
   const [financialIncludeContracts, setFinancialIncludeContracts] = useState(true);
+  const [financialIncludeStores, setFinancialIncludeStores] = useState(true);
 
   const [financialData, setFinancialData] = useState<{
-    days: { dateStr: string; dateLabel: string; banners: number; stories: number; contracts: number; total: number }[];
+    days: { dateStr: string; dateLabel: string; banners: number; stories: number; contracts: number; stores: number; total: number }[];
     grandTotal: number;
     totalBanners: number;
     totalStories: number;
     totalContracts: number;
-  }>({ days: [], grandTotal: 0, totalBanners: 0, totalStories: 0, totalContracts: 0 });
+    totalStores: number;
+  }>({ days: [], grandTotal: 0, totalBanners: 0, totalStories: 0, totalContracts: 0, totalStores: 0 });
 
   useEffect(() => {
     async function fetchFinancialData() {
@@ -1322,7 +1325,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           .lte('paid_at', end.toISOString());
 
         if (!err && data) {
-          const daysMap: Record<string, { dateLabel: string; banners: number; stories: number; contracts: number; total: number }> = {};
+          const daysMap: Record<string, { dateLabel: string; banners: number; stories: number; contracts: number; stores: number; total: number }> = {};
           const dayList: string[] = [];
 
           let current = new Date(start);
@@ -1330,7 +1333,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           while (current <= limit) {
             const key = current.toISOString().split('T')[0];
             const label = current.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-            daysMap[key] = { dateLabel: label, banners: 0, stories: 0, contracts: 0, total: 0 };
+            daysMap[key] = { dateLabel: label, banners: 0, stories: 0, contracts: 0, stores: 0, total: 0 };
             dayList.push(key);
             current.setDate(current.getDate() + 1);
           }
@@ -1339,6 +1342,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           let totalBannersSum = 0;
           let totalStoriesSum = 0;
           let totalContractsSum = 0;
+          let totalStoresSum = 0;
 
           data.forEach((p: any) => {
             const paidDate = new Date(p.paid_at || p.created_at);
@@ -1398,6 +1402,33 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
             }
           }
 
+          if (financialIncludeStores) {
+            const { data: storesData, error: sErr } = await supabase
+              .from('enterprise_subscriptions' as any)
+              .select('id, amount_paid, status, starts_at, created_at')
+              .or('status.eq.succeeded,status.eq.active,status.eq.paid');
+
+            if (!sErr && storesData) {
+              storesData.forEach((sub: any) => {
+                const paymentDateStr = sub.starts_at || sub.created_at;
+                const paymentDate = new Date(paymentDateStr);
+                const key = paymentDate.toISOString().split('T')[0];
+
+                const rawAmount = parseFloat(sub.amount_paid || 0);
+                const amount = rawAmount > 0 ? rawAmount / 100 : 0;
+
+                if (paymentDate >= start && paymentDate <= end) {
+                  if (daysMap[key]) {
+                    daysMap[key].stores += amount;
+                    daysMap[key].total += amount;
+                    grandTotalSum += amount;
+                    totalStoresSum += amount;
+                  }
+                }
+              });
+            }
+          }
+
           const formattedDays = dayList.map(key => ({
             dateStr: key,
             ...daysMap[key]
@@ -1408,7 +1439,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
             grandTotal: grandTotalSum,
             totalBanners: totalBannersSum,
             totalStories: totalStoriesSum,
-            totalContracts: totalContractsSum
+            totalContracts: totalContractsSum,
+            totalStores: totalStoresSum
           });
         }
       } catch (err) {
@@ -1416,7 +1448,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       }
     }
     fetchFinancialData();
-  }, [activeTab, financialStartDate, financialEndDate, financialIncludeBanners, financialIncludeStories, financialIncludeContracts, contractValue]);
+  }, [activeTab, financialStartDate, financialEndDate, financialIncludeBanners, financialIncludeStories, financialIncludeContracts, financialIncludeStores, contractValue]);
 
   useEffect(() => {
     async function fetchNewUsersCount() {
@@ -1474,6 +1506,25 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       }
     }
     fetchNewContractsCount();
+  }, []);
+
+  useEffect(() => {
+    async function fetchNewStoresCount() {
+      try {
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+        const { count, error: err } = await supabase
+          .from('enterprises')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', oneMonthAgo.toISOString());
+        if (!err && count !== null) {
+          setNewStoresCount(count);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar novas lojas:', err);
+      }
+    }
+    fetchNewStoresCount();
   }, []);
 
   useEffect(() => {
@@ -2462,6 +2513,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               newUsersCount={newUsersCount}
               newWorksCount={newWorksCount}
               newContractsCount={newContractsCount}
+              newStoresCount={newStoresCount}
               pendingReportsCount={pendingReportsCount}
               totalActiveStoriesChannelsCount={totalActiveStoriesChannelsCount}
               totalActiveBannersCount={totalActiveBannersCount}
@@ -2569,6 +2621,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               setFinancialIncludeStories={setFinancialIncludeStories}
               financialIncludeContracts={financialIncludeContracts}
               setFinancialIncludeContracts={setFinancialIncludeContracts}
+              financialIncludeStores={financialIncludeStores}
+              setFinancialIncludeStores={setFinancialIncludeStores}
             />
           )}
 

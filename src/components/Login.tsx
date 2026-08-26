@@ -1,3 +1,4 @@
+/* eslint-disable complexity */
 "use client";
 
 import React, { useState } from 'react';
@@ -7,6 +8,16 @@ import logoImg from '../assets/logo.png';
 
 interface LoginProps {
   onLoginSuccess: (username: string) => void;
+}
+
+function isRateLimitError(err: any): boolean {
+  if (!err) return false;
+  return (
+    err.status === 429 ||
+    err.code === '429' ||
+    String(err.message || '').includes('429') ||
+    String(err.message || '').toLowerCase().includes('rate limit')
+  );
 }
 
 export default function Login({ onLoginSuccess }: LoginProps) {
@@ -36,7 +47,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
       if (dbError) {
         console.error('Supabase DB error:', dbError);
-        setError(`Erro de banco de dados: ${dbError.message}`);
+        if (isRateLimitError(dbError)) {
+          setError('Muitas tentativas consecutivas de login. Por favor, aguarde alguns minutos antes de tentar novamente.');
+        } else {
+          setError('Erro ao validar credenciais. Tente novamente.');
+        }
         return;
       }
 
@@ -47,7 +62,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       }
     } catch (err: any) {
       console.error('Unexpected login error:', err);
-      setError(err.message || 'Erro inesperado ao realizar login.');
+      if (isRateLimitError(err)) {
+        setError('Muitas tentativas consecutivas de login. Por favor, aguarde alguns minutos antes de tentar novamente.');
+      } else {
+        setError('Erro inesperado ao realizar login.');
+      }
     } finally {
       setLoading(false);
     }

@@ -8,12 +8,14 @@ interface FinancialTabProps {
     totalBanners: number;
     totalStories: number;
     totalContracts: number;
+    totalStores?: number;
     days: Array<{
       dateStr: string;
       dateLabel: string;
       banners: number;
       stories: number;
       contracts: number;
+      stores?: number;
       total: number;
     }>;
   };
@@ -27,6 +29,8 @@ interface FinancialTabProps {
   setFinancialIncludeStories: (val: boolean) => void;
   financialIncludeContracts: boolean;
   setFinancialIncludeContracts: (val: boolean) => void;
+  financialIncludeStores?: boolean;
+  setFinancialIncludeStores?: (val: boolean) => void;
 }
 
 export const FinancialTab: React.FC<FinancialTabProps> = ({
@@ -40,7 +44,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({
   financialIncludeStories,
   setFinancialIncludeStories,
   financialIncludeContracts,
-  setFinancialIncludeContracts
+  setFinancialIncludeContracts,
+  financialIncludeStores = true,
+  setFinancialIncludeStores
 }) => {
   const { info } = useToast();
 
@@ -113,6 +119,18 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({
               />
               <label htmlFor="incContracts" style={{ cursor: 'pointer', margin: 0, textTransform: 'none', fontSize: '13px', fontWeight: 600 }}>Exibir Contratos</label>
             </div>
+            {setFinancialIncludeStores && (
+              <div className="filter-control filter-control-checkbox">
+                <input
+                  type="checkbox"
+                  id="incStores"
+                  checked={financialIncludeStores}
+                  onChange={(e) => setFinancialIncludeStores(e.target.checked)}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                />
+                <label htmlFor="incStores" style={{ cursor: 'pointer', margin: 0, textTransform: 'none', fontSize: '13px', fontWeight: 600 }}>Exibir Lojas</label>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -147,6 +165,12 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{ width: '12px', height: '4px', backgroundColor: '#10b981', borderRadius: '2px' }} />
                 <span>Contratos</span>
+              </div>
+            )}
+            {financialIncludeStores && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '12px', height: '4px', backgroundColor: '#f59e0b', borderRadius: '2px' }} />
+                <span>Lojas</span>
               </div>
             )}
           </div>
@@ -195,6 +219,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({
                   const pointsBanners: string[] = [];
                   const pointsStories: string[] = [];
                   const pointsContracts: string[] = [];
+                  const pointsStores: string[] = [];
                   const pointsTotal: string[] = [];
                   const stepX = (600 - 50) / (financialData.days.length - 1 || 1);
 
@@ -203,11 +228,13 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({
                     const yBanners = 260 - ((day.banners / maxVal) * 220);
                     const yStories = 260 - ((day.stories / maxVal) * 220);
                     const yContracts = 260 - (((day.contracts || 0) / maxVal) * 220);
+                    const yStores = 260 - (((day.stores || 0) / maxVal) * 220);
                     const yTotal = 260 - ((day.total / maxVal) * 220);
 
                     pointsBanners.push(`${x},${yBanners}`);
                     pointsStories.push(`${x},${yStories}`);
                     pointsContracts.push(`${x},${yContracts}`);
+                    pointsStores.push(`${x},${yStores}`);
                     pointsTotal.push(`${x},${yTotal}`);
                   });
 
@@ -221,6 +248,9 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({
                       )}
                       {financialIncludeContracts && (
                         <polyline fill="none" stroke="#10b981" strokeWidth="2" points={pointsContracts.join(' ')} />
+                      )}
+                      {financialIncludeStores && (
+                        <polyline fill="none" stroke="#f59e0b" strokeWidth="2" points={pointsStores.join(' ')} />
                       )}
                       <polyline fill="none" stroke="#ef4444" strokeWidth="3" points={pointsTotal.join(' ')} />
 
@@ -237,7 +267,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({
                             stroke="#fff"
                             strokeWidth="1.5"
                             style={{ cursor: 'pointer' }}
-                            onClick={() => info(`${day.dateLabel} - Total: R$ ${day.total.toFixed(2)} (Banners: R$ ${day.banners.toFixed(2)}, Stories: R$ ${day.stories.toFixed(2)}, Contratos: R$ ${(day.contracts || 0).toFixed(2)})`)}
+                            onClick={() => info(`${day.dateLabel} - Total: R$ ${day.total.toFixed(2)} (Banners: R$ ${day.banners.toFixed(2)}, Stories: R$ ${day.stories.toFixed(2)}, Contratos: R$ ${(day.contracts || 0).toFixed(2)}, Lojas: R$ ${(day.stores || 0).toFixed(2)})`)}
                           />
                         );
                       })}
@@ -256,16 +286,21 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({
           </h3>
 
           {(() => {
-            const totalVal = financialData.totalBanners + financialData.totalStories + (financialData.totalContracts || 0);
+            const totalVal = financialData.totalBanners + financialData.totalStories + (financialData.totalContracts || 0) + (financialData.totalStores || 0);
             const bannerPct = totalVal > 0 ? (financialData.totalBanners / totalVal) * 100 : 0;
             const storyPct = totalVal > 0 ? (financialData.totalStories / totalVal) * 100 : 0;
             const contractPct = totalVal > 0 ? ((financialData.totalContracts || 0) / totalVal) * 100 : 0;
+            const storePct = totalVal > 0 ? ((financialData.totalStores || 0) / totalVal) * 100 : 0;
+
+            const p1 = bannerPct;
+            const p2 = p1 + storyPct;
+            const p3 = p2 + contractPct;
 
             return (
               <div className="financial-pie-wrapper">
                 <div className="financial-pie-circle" style={{
                   background: totalVal > 0
-                    ? `conic-gradient(#3b82f6 0% ${bannerPct}%, #8b5cf6 ${bannerPct}% ${bannerPct + storyPct}%, #10b981 ${bannerPct + storyPct}% 100%)`
+                    ? `conic-gradient(#3b82f6 0% ${p1}%, #8b5cf6 ${p1}% ${p2}%, #10b981 ${p2}% ${p3}%, #f59e0b ${p3}% 100%)`
                     : '#e5e7eb',
                 }}>
                   <div className="financial-pie-inner">
@@ -302,6 +337,15 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({
                       R$ {(financialData.totalContracts || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({contractPct.toFixed(1)}%)
                     </span>
                   </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#f59e0b' }} />
+                      <span>Lojas</span>
+                    </div>
+                    <span style={{ fontWeight: 600 }}>
+                      R$ {(financialData.totalStores || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({storePct.toFixed(1)}%)
+                    </span>
+                  </div>
                 </div>
               </div>
             );
@@ -319,6 +363,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({
                 <th>Banners</th>
                 <th>Stories</th>
                 <th>Contratos</th>
+                <th>Lojas</th>
                 <th>Total do Dia</th>
               </tr>
             </thead>
@@ -329,6 +374,7 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({
                   <td>R$ {day.banners.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td>R$ {day.stories.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td>R$ {(day.contracts || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td>R$ {(day.stores || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td style={{ fontWeight: 700, color: 'var(--primary)' }}>
                     R$ {day.total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
@@ -341,3 +387,4 @@ export const FinancialTab: React.FC<FinancialTabProps> = ({
     </div>
   );
 };
+

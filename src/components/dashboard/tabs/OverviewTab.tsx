@@ -1,3 +1,4 @@
+/* eslint-disable complexity */
 import React from 'react';
 import {
   Users,
@@ -6,6 +7,7 @@ import {
   FileText,
   Image as ImageIcon,
   Hammer,
+  Building2,
   Info
 } from 'lucide-react';
 import { useToast } from '../../../hooks/useToast';
@@ -16,6 +18,7 @@ interface OverviewTabProps {
   newUsersCount: number | null;
   newWorksCount: number | null;
   newContractsCount: number | null;
+  newStoresCount?: number | null;
   pendingReportsCount: number;
   totalActiveStoriesChannelsCount: number | null;
   totalActiveBannersCount: number | null;
@@ -28,6 +31,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   newUsersCount,
   newWorksCount,
   newContractsCount,
+  newStoresCount = null,
   pendingReportsCount,
   totalActiveStoriesChannelsCount,
   totalActiveBannersCount,
@@ -134,6 +138,29 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           </div>
           <div className="stat-icon-wrapper blue" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', marginTop: '8px' }}>
             <FileText size={24} />
+          </div>
+        </div>
+
+        {/* Novas Lojas */}
+        <div
+          className="stat-card"
+          style={{ position: 'relative', cursor: onNavigate ? 'pointer' : 'default' }}
+          onClick={() => handleCardClick('stores')}
+        >
+          <Info
+            size={14}
+            style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--text-muted)', cursor: 'pointer', zIndex: 2 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              info("Lojas e empresas cadastradas no aplicativo há menos de 1 mês.");
+            }}
+          />
+          <div className="stat-info">
+            <h3>Novas Lojas</h3>
+            <div className="stat-value">{newStoresCount !== null ? newStoresCount : '...'}</div>
+          </div>
+          <div className="stat-icon-wrapper purple" style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', marginTop: '8px' }}>
+            <Building2 size={24} />
           </div>
         </div>
 

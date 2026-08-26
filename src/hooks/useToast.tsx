@@ -59,7 +59,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, [addToast]);
 
   const error = useCallback((message: string, duration?: number) => {
-    addToast(message, 'error');
+    let formattedMessage = message;
+    if (
+      message &&
+      (message.includes('429') ||
+        message.toLowerCase().includes('too many requests') ||
+        message.toLowerCase().includes('rate limit') ||
+        message.toLowerCase().includes('rate_limit'))
+    ) {
+      formattedMessage = 'Limite de solicitações atingido. Por favor, aguarde alguns instantes antes de tentar novamente.';
+    }
+    addToast(formattedMessage, 'error');
   }, [addToast]);
 
   useEffect(() => {

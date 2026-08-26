@@ -45,7 +45,15 @@ export const enterprisesService = {
       .select(`
         *,
         enterprise_addresses (*),
-        enterprise_subscriptions (*)
+        enterprise_subscriptions (
+          id,
+          enterprise_id,
+          amount_paid,
+          status,
+          starts_at,
+          expires_at,
+          created_at
+        )
       `, { count: 'exact' });
 
     if (search) {

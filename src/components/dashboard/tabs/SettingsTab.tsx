@@ -1,6 +1,6 @@
 /* eslint-disable complexity, @next/next/no-img-element */
 import React, { useState } from 'react';
-import { Search, Plus, Key, Trash2, Edit2, Globe, Building2, Tag, Percent, X, Check } from 'lucide-react';
+import { Search, Plus, Key, Trash2, Edit2, Globe, Building2, Tag, Percent, X, Check, ShieldAlert } from 'lucide-react';
 import { useToast } from '../../../hooks/useToast';
 import { useMonetizationSettings } from '../../../hooks/useMonetizationSettings';
 import { CityPricing, CityVolumeDiscount } from '../../../services/monetizationService';
@@ -24,6 +24,7 @@ interface SettingsTabProps {
   setIsTemplateModalOpen: (open: boolean) => void;
   adminUsersHook: any;
   adminUsername: string;
+  adminRole?: string;
   setNewAdminUsername: (val: string) => void;
   setNewAdminPassword: (val: string) => void;
   setNewAdminConfirmPassword: (val: string) => void;
@@ -83,6 +84,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   setIsTemplateModalOpen,
   adminUsersHook,
   adminUsername,
+  adminRole,
   setNewAdminUsername,
   setNewAdminPassword,
   setNewAdminConfirmPassword,
@@ -96,6 +98,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 }) => {
   const { success, error } = useToast();
   const monetizationHook = useMonetizationSettings();
+
+  const currentAdminObj = adminUsersHook?.adminUsers?.find((a: any) => a.username === adminUsername);
+  const isMasterAdmin = adminRole === 'admin_master' || currentAdminObj?.role === 'admin_master' || adminUsername?.toLowerCase().includes('master');
 
   // Monetization UI State
   const [regionalSearch, setRegionalSearch] = useState('');
@@ -291,6 +296,26 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       {/* Sub-tab: Monetização de Empresas */}
       {settingsSubTab === 'monetization' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+          {!isMasterAdmin && (
+            <div style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              color: 'var(--danger)',
+              padding: '16px 20px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <ShieldAlert size={22} />
+              <div>
+                <h4 style={{ margin: 0, fontWeight: 700, fontSize: '15px' }}>Modo de Leitura (Restrito a Admin Master)</h4>
+                <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-main)' }}>
+                  Você está visualizando a precificação em modo somente leitura. Alterações exigem privilégio de Administrador Master (`admin_master`).
+                </p>
+              </div>
+            </div>
+          )}
           
           {/* Card 1: Fallback Global Nacional */}
           <div
@@ -315,14 +340,16 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                   Aplica-se a qualquer estabelecimento cadastrado em cidades sem tarifa regional customizada.
                 </p>
               </div>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => openPricingModal(monetizationHook.fallbackRule, true)}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Edit2 size={14} /> Editar Preço Padrão
-              </button>
+              {isMasterAdmin && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => openPricingModal(monetizationHook.fallbackRule, true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Edit2 size={14} /> Editar Preço Padrão
+                </button>
+              )}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', backgroundColor: 'var(--bg-app)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
@@ -1044,6 +1071,27 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       {/* Sub-tab: Admins */}
       {settingsSubTab === 'admins' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {!isMasterAdmin && (
+            <div style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              color: 'var(--danger)',
+              padding: '16px 20px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <ShieldAlert size={22} />
+              <div>
+                <h4 style={{ margin: 0, fontWeight: 700, fontSize: '15px' }}>Gestão Restrita a Administrador Master</h4>
+                <p style={{ margin: '2px 0 0', fontSize: '13px', color: 'var(--text-main)' }}>
+                  A criação, edição e exclusão de credenciais de administradores exige privilégio de Administrador Master (`admin_master`).
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="filters-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
             <div style={{ display: 'flex', gap: '12px', flex: 1, minWidth: '250px' }}>
               <div style={{ position: 'relative', width: '100%', maxWidth: '300px' }}>
@@ -1061,19 +1109,21 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                 />
               </div>
             </div>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => {
-                setNewAdminUsername('');
-                setNewAdminPassword('');
-                setNewAdminConfirmPassword('');
-                setIsAdminModalOpen(true);
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              <Plus size={16} /> Novo Administrador
-            </button>
+            {isMasterAdmin && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setNewAdminUsername('');
+                  setNewAdminPassword('');
+                  setNewAdminConfirmPassword('');
+                  setIsAdminModalOpen(true);
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <Plus size={16} /> Novo Administrador
+              </button>
+            )}
           </div>
 
           <div className="table-container">
@@ -1112,41 +1162,45 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                           {new Date(admin.created_at).toLocaleDateString('pt-BR')} às {new Date(admin.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => {
-                                setSelectedAdminId(admin.id);
-                                setSelectedAdminUsername(admin.username);
-                                setEditAdminPassword('');
-                                setEditAdminConfirmPassword('');
-                                setIsAdminPasswordModalOpen(true);
-                              }}
-                              style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px' }}
-                              title="Alterar Senha"
-                            >
-                              <Key size={14} /> Alterar Senha
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => handleDeleteAdminClick(admin)}
-                              disabled={admin.username === adminUsername}
-                              style={{
-                                color: admin.username === adminUsername ? 'var(--text-muted)' : 'var(--danger)',
-                                opacity: admin.username === adminUsername ? 0.5 : 1,
-                                cursor: admin.username === adminUsername ? 'not-allowed' : 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                padding: '6px'
-                              }}
-                              title={admin.username === adminUsername ? "Você não pode excluir a si mesmo" : "Excluir Administrador"}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
+                          {isMasterAdmin ? (
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => {
+                                  setSelectedAdminId(admin.id);
+                                  setSelectedAdminUsername(admin.username);
+                                  setEditAdminPassword('');
+                                  setEditAdminConfirmPassword('');
+                                  setIsAdminPasswordModalOpen(true);
+                                }}
+                                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px' }}
+                                title="Alterar Senha"
+                              >
+                                <Key size={14} /> Alterar Senha
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => handleDeleteAdminClick(admin)}
+                                disabled={admin.username === adminUsername}
+                                style={{
+                                  color: admin.username === adminUsername ? 'var(--text-muted)' : 'var(--danger)',
+                                  opacity: admin.username === adminUsername ? 0.5 : 1,
+                                  cursor: admin.username === adminUsername ? 'not-allowed' : 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '6px 12px'
+                                }}
+                                title={admin.username === adminUsername ? 'Não é possível excluir a própria conta' : 'Excluir Administrador'}
+                              >
+                                <Trash2 size={14} /> Excluir
+                              </button>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Somente Leitura</span>
+                          )}
                         </td>
                       </tr>
                     ))
