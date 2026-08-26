@@ -183,19 +183,18 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({
                 <th>Solicitante</th>
                 <th>Abrangência</th>
                 <th>Vigência</th>
-                <th style={{ textAlign: 'right' }}>Ações</th>
               </tr>
             </thead>
             <tbody>
               {moderationHook.loading ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                     Carregando solicitações...
                   </td>
                 </tr>
               ) : totalModerationItems === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                     Nenhuma solicitação {
                       moderationHook.statusFilter === 'pending' ? 'pendente' :
                         moderationHook.statusFilter === 'accepted' ? 'aceita' :
@@ -218,7 +217,11 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({
                   const itemCity = isBanner ? item.city : item.story_channels?.city;
 
                   return (
-                    <tr key={`${item._type}-${item.id}`}>
+                    <tr
+                      key={`${item._type}-${item.id}`}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => handleOpenModerationDetails(item, isBanner ? 'banner' : 'story')}
+                    >
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <div style={{
@@ -273,14 +276,6 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({
                         <span style={{ fontSize: '13px' }}>
                           {start ? new Date(start).toLocaleDateString('pt-BR') : '-'} até {end ? new Date(end).toLocaleDateString('pt-BR') : '-'}
                         </span>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => handleOpenModerationDetails(item, isBanner ? 'banner' : 'story')}
-                        >
-                          {item.status === 'pending' ? 'Analisar' : 'Detalhes'}
-                        </button>
                       </td>
                     </tr>
                   );

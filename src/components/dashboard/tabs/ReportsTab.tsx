@@ -101,25 +101,28 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ reportHook, onOpenReport
                 <th>Tipo de Alvo</th>
                 <th>Data</th>
                 <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Ações</th>
               </tr>
             </thead>
             <tbody>
               {reportHook.loading ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                     Carregando denúncias...
                   </td>
                 </tr>
               ) : reportHook.reports.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                     Nenhuma denúncia encontrada com os filtros selecionados.
                   </td>
                 </tr>
               ) : (
                 reportHook.reports.map((rep: any) => (
-                  <tr key={rep.id}>
+                  <tr
+                    key={rep.id}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => onOpenReportDetails(rep)}
+                  >
                     <td>
                       <span style={{ fontWeight: 500 }}>{rep.reason || rep.reason_category || rep.category || 'Não informado'}</span>
                     </td>
@@ -131,14 +134,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ reportHook, onOpenReport
                       <span className={`badge ${rep.status === 'new' || rep.status === 'pending' ? 'badge-danger' : rep.status === 'in_review' ? 'badge-warning' : rep.status === 'resolved' ? 'badge-success' : 'badge-secondary'}`}>
                         {rep.status === 'new' || rep.status === 'pending' ? 'Pendente' : rep.status === 'in_review' ? 'Em Análise' : rep.status === 'resolved' ? 'Resolvida' : 'Ignorada'}
                       </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => onOpenReportDetails(rep)}
-                      >
-                        Exibir Detalhes
-                      </button>
                     </td>
                   </tr>
                 ))

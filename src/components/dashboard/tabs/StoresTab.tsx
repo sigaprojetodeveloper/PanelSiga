@@ -344,7 +344,14 @@ export const StoresTab: React.FC = () => {
                   const extraCount = addresses.length - 1;
 
                   return (
-                    <tr key={ent.id}>
+                    <tr
+                      key={ent.id}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => {
+                        enterprisesHook.loadEnterpriseDetails(ent.id);
+                        setDetailsTab('overview');
+                      }}
+                    >
                       {/* Logo */}
                       <td>
                         {ent.logo_url ? (
@@ -433,25 +440,15 @@ export const StoresTab: React.FC = () => {
                       {/* Actions */}
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            title="Ver Detalhes e Auditoria"
-                            onClick={() => {
-                              enterprisesHook.loadEnterpriseDetails(ent.id);
-                              setDetailsTab('overview');
-                            }}
-                            style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            <Eye size={14} />
-                          </button>
-
                           {ent.status === 'BLOCKED' ? (
                             <button
                               type="button"
                               className="btn btn-secondary btn-sm"
                               title="Desbloquear Empresa"
-                              onClick={() => enterprisesHook.setUnblockingEnterprise(ent)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                enterprisesHook.setUnblockingEnterprise(ent);
+                              }}
                               style={{ padding: '6px 10px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}
                             >
                               <Unlock size={14} />
@@ -461,7 +458,8 @@ export const StoresTab: React.FC = () => {
                               type="button"
                               className="btn btn-danger btn-sm"
                               title="Bloquear Empresa"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 enterprisesHook.setBlockingEnterprise(ent);
                                 setBlockReasonInput('');
                                 setBlockReasonError('');

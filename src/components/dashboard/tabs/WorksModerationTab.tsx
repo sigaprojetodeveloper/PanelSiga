@@ -173,7 +173,6 @@ export const WorksModerationTab: React.FC<WorksModerationTabProps> = ({ worksMod
                 <th>Criador</th>
                 <th>Data de Criação</th>
                 <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -181,7 +180,7 @@ export const WorksModerationTab: React.FC<WorksModerationTabProps> = ({ worksMod
                 /* Skeleton Loading State */
                 Array.from({ length: 5 }).map((_, index) => (
                   <tr key={`skeleton-${index}`}>
-                    <td colSpan={6} style={{ padding: '16px 20px' }}>
+                    <td colSpan={5} style={{ padding: '16px 20px' }}>
                       <div style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -200,7 +199,7 @@ export const WorksModerationTab: React.FC<WorksModerationTabProps> = ({ worksMod
               ) : works.length === 0 ? (
                 /* Empty State */
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '48px 20px' }}>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '48px 20px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}>
                       <Inbox size={42} strokeWidth={1.5} />
                       <span style={{ fontSize: '15px', fontWeight: 600 }}>Nenhuma obra encontrada</span>
@@ -216,7 +215,11 @@ export const WorksModerationTab: React.FC<WorksModerationTabProps> = ({ worksMod
                   const mediaCover = work.media_urls && work.media_urls.length > 0 ? work.media_urls[0] : null;
 
                   return (
-                    <tr key={work.id}>
+                    <tr
+                      key={work.id}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => handleOpenDetail(work)}
+                    >
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <div style={{
@@ -278,16 +281,6 @@ export const WorksModerationTab: React.FC<WorksModerationTabProps> = ({ worksMod
                       </td>
                       <td>
                         {getStatusBadge(work.status)}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => handleOpenDetail(work)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          <Eye size={13} /> Ver Detalhes
-                        </button>
                       </td>
                     </tr>
                   );
