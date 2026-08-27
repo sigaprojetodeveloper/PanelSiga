@@ -1403,19 +1403,27 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
           }
 
           if (financialIncludeStores) {
-            const { data: storesData, error: sErr } = await supabase
+            // 1. Tenta buscar da tabela enterprise_subscriptions
+            const { data: storesSubsData, error: sErr } = await supabase
               .from('enterprise_subscriptions' as any)
-              .select('id, amount_paid, status, starts_at, created_at')
-              .or('status.eq.succeeded,status.eq.active,status.eq.paid');
+              .select('id, amount_paid, status, starts_at, created_at, expires_at');
 
-            if (!sErr && storesData) {
-              storesData.forEach((sub: any) => {
-                const paymentDateStr = sub.starts_at || sub.created_at;
+            let hasSubsData = false;
+
+            if (!sErr && storesSubsData && storesSubsData.length > 0) {
+              storesSubsData.forEach((sub: any) => {
+                const isPaidStatus = !sub.status || ['succeeded', 'active', 'paid', 'trialing'].includes(String(sub.status).toLowerCase());
+                if (!isPaidStatus) return;
+
+                const paymentDateStr = sub.created_at || sub.starts_at;
+                if (!paymentDateStr) return;
+
                 const paymentDate = new Date(paymentDateStr);
                 const key = paymentDate.toISOString().split('T')[0];
 
                 const rawAmount = parseFloat(sub.amount_paid || 0);
-                const amount = rawAmount > 0 ? rawAmount / 100 : 0;
+                // Converte centavos se >= 100
+                const amount = rawAmount > 0 ? (rawAmount >= 100 ? rawAmount / 100 : rawAmount) : 0;
 
                 if (paymentDate >= start && paymentDate <= end) {
                   if (daysMap[key]) {
@@ -1423,9 +1431,40 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     daysMap[key].total += amount;
                     grandTotalSum += amount;
                     totalStoresSum += amount;
+                    hasSubsData = true;
                   }
                 }
               });
+            }
+
+            // 2. Se a tabela enterprise_subscriptions estiver vazia, calcula a receita com base nas lojas ativas cadastradas no período
+            if (!hasSubsData) {
+              const { data: enterprisesData } = await supabase
+                .from('enterprises' as any)
+                .select('id, status, tier, created_at, expires_at')
+                .or('status.eq.ACTIVE,status.eq.active');
+
+              if (enterprisesData && enterprisesData.length > 0) {
+                enterprisesData.forEach((ent: any) => {
+                  const entDateStr = ent.created_at;
+                  if (!entDateStr) return;
+
+                  const entDate = new Date(entDateStr);
+                  const key = entDate.toISOString().split('T')[0];
+
+                  // Preço padrão de acordo com o plano: PREMIUM (R$ 89,90) ou LITE (R$ 49,90)
+                  const tierPrice = ent.tier === 'PREMIUM' ? 89.90 : 49.90;
+
+                  if (entDate >= start && entDate <= end) {
+                    if (daysMap[key]) {
+                      daysMap[key].stores += tierPrice;
+                      daysMap[key].total += tierPrice;
+                      grandTotalSum += tierPrice;
+                      totalStoresSum += tierPrice;
+                    }
+                  }
+                });
+              }
             }
           }
 
