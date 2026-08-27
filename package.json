@@ -4,14 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "dev:dev": "node scripts/switch-env.mjs dev && next dev",
-    "dev:prod": "node scripts/switch-env.mjs prod && next dev",
+    "dev": "node scripts/switch-env.mjs dev && next dev",
+    "prod": "node scripts/switch-env.mjs prod && next dev",
     "env:dev": "node scripts/switch-env.mjs dev",
     "env:prod": "node scripts/switch-env.mjs prod",
     "env:status": "node scripts/switch-env.mjs status",
     "build": "next build",
-    "build:dev": "node scripts/switch-env.mjs dev && next build",
     "build:prod": "node scripts/switch-env.mjs prod && next build",
     "start": "next start",
     "lint": "next lint"

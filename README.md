@@ -10,12 +10,10 @@ Antes de iniciar, certifique-se de que possui o **Node.js** instalado em sua má
 
 ### Variáveis de Ambiente
 
-Crie ou edite o arquivo `.env` na raiz da pasta `SigaPanelAdmin` com os seguintes parâmetros obtidos da sua instância do Supabase:
+O projeto suporta múltiplos ambientes gerenciados automaticamente. Você pode copiar [.env.example](file:///home/gernano/workspace/antigravity/Projeto_Siga/ProjetoGlobal/SigaPanelAdmin/.env.example) para criar novas configurações.
 
-```env
-VITE_SUPABASE_URL=https://sua-url-do-supabase.supabase.co
-VITE_SUPABASE_ANON_KEY=seu-token-public-anon
-```
+* `.env.development` — Aponta para o projeto Supabase de Desenvolvimento.
+* `.env.production` — Aponta para o projeto Supabase de Produção.
 
 ---
 
@@ -23,40 +21,47 @@ VITE_SUPABASE_ANON_KEY=seu-token-public-anon
 
 Na raiz do projeto (`SigaPanelAdmin`), utilize os seguintes comandos do NPM:
 
-### 1. Instalação de Dependências
-Para instalar todas as bibliotecas necessárias para executar e construir o projeto:
+### 1. Servidor Local (Desenvolvimento vs Produção)
+
+* **Iniciar em Desenvolvimento:**
+  ```bash
+  npm run dev
+  ```
+  *Garante o apontamento para Desenvolvimento e inicia o Next.js em `http://localhost:3000`.*
+
+* **Iniciar em Produção:**
+  ```bash
+  npm run prod
+  ```
+  *Exibe alerta de segurança no terminal, garante o apontamento para Produção e inicia o Next.js.*
+
+### 2. Gerenciamento Rápido de Ambientes
+
+* **Chavear apenas as variáveis:**
+  ```bash
+  npm run env:dev     # Aponta para Desenvolvimento
+  npm run env:prod    # Aponta para Produção
+  npm run env:status  # Verifica qual ambiente está ativo
+  ```
+
+### 3. Compilação e Build
+
+* **Build para Desenvolvimento:**
+  ```bash
+  npm run build
+  ```
+
+* **Build para Produção:**
+  ```bash
+  npm run build:prod
+  ```
+
+### 4. Executar Servidor Compilado (Start)
 ```bash
-npm install
+npm run start
 ```
 
-### 2. Servidor de Desenvolvimento
-Para iniciar o servidor local com Hot Module Replacement (HMR):
-```bash
-npm run dev
-```
-O painel estará disponível em `http://localhost:5173`.
-
-### 3. Compilação (Build)
-Para validar os tipos do TypeScript e compilar os arquivos otimizados para produção:
-```bash
-npm run build
-```
-Esse comando gera os artefatos estáticos prontos para distribuição no diretório `/dist`.
-
-### 4. Limpeza (Clean)
-Caso queira remover a compilação anterior (limpar a pasta de build) para garantir que uma nova compilação seja feita do zero:
-```bash
-npm run clean
-```
-
-### 5. Pré-visualização Local do Build
-Para testar localmente o build de produção gerado na pasta `/dist`:
-```bash
-npm run preview
-```
-
-### 6. Análise Estática (Linter)
-Para validar o código contra regras estritas do ESLint e garantir qualidade de formatação e padrões do React/TypeScript:
+### 5. Análise Estática (Linter)
 ```bash
 npm run lint
 ```
