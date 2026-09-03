@@ -37,26 +37,55 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setError(null);
 
     try {
-      // 1. Query the admin_users table
-      const { data, error: dbError } = await (supabase
-        .from('admin_users' as any)
-        .select('*')
-        .eq('username', username)
-        .eq('password', password)
-        .maybeSingle() as any);
+      let userEmail = username.trim();
 
-      if (dbError) {
-        console.error('Supabase DB error:', dbError);
-        if (isRateLimitError(dbError)) {
+      // Se o usuário digitou um username (ex: SigaAdmin), resolve o e-mail correspondente
+      if (!userEmail.includes('@')) {
+        const { data: adminRecord } = await (supabase
+          .from('admin_users' as any)
+          .select('email')
+          .eq('username', userEmail)
+          .maybeSingle() as any);
+
+        if (adminRecord && adminRecord.email) {
+          userEmail = adminRecord.email;
+        } else {
+          userEmail = `${userEmail.toLowerCase()}@siga.com`;
+        }
+      }
+
+      // Autenticação oficial no Supabase Auth para emitir o token validado
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: userEmail,
+        password: password,
+      });
+
+      if (authError || !authData?.session) {
+        console.error('Supabase Auth error:', authError);
+
+        // Fallback de verificação na tabela admin_users caso a senha tenha sido alterada diretamente
+        const { data: dbUser } = await (supabase
+          .from('admin_users' as any)
+          .select('*')
+          .eq('username', username)
+          .eq('password', password)
+          .maybeSingle() as any);
+
+        if (dbUser) {
+          onLoginSuccess(dbUser.username);
+          return;
+        }
+
+        if (isRateLimitError(authError)) {
           setError('Muitas tentativas consecutivas de login. Por favor, aguarde alguns minutos antes de tentar novamente.');
         } else {
-          setError('Erro ao validar credenciais. Tente novamente.');
+          setError('Usuário ou senha incorretos.');
         }
         return;
       }
 
-      if (data) {
-        onLoginSuccess(data.username);
+      if (authData?.user) {
+        onLoginSuccess(username);
       } else {
         setError('Usuário ou senha incorretos.');
       }

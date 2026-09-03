@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '../lib/supabase';
 import Dashboard from '../components/Dashboard';
 
 export default function Page() {
@@ -11,16 +12,25 @@ export default function Page() {
 
   useEffect(() => {
     setMounted(true);
-    const user = localStorage.getItem('siga_admin_user');
-    if (!user) {
-      router.push('/login');
-    } else {
-      setAdminUser(user);
+    async function checkAuth() {
+      const user = localStorage.getItem('siga_admin_user');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!user && !session) {
+        router.push('/login');
+      } else {
+        setAdminUser(user || session?.user?.user_metadata?.username || session?.user?.email || 'Admin');
+      }
     }
+    checkAuth();
   }, [router]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     localStorage.removeItem('siga_admin_user');
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn('Erro ao deslogar do Supabase:', e);
+    }
     router.push('/login');
   };
 
