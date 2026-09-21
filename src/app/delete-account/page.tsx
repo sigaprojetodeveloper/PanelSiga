@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import DeleteAccountClient from './DeleteAccountClient';
+import DeleteAccountClient from '@/app/delete-account/DeleteAccountClient';
 
 export const metadata: Metadata = {
   title: 'Exclusão de Conta e Dados Pessoais | Siga',
