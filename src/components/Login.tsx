@@ -192,6 +192,18 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             {loading ? 'Entrando...' : 'Entrar no Painel'}
           </button>
         </form>
+
+        <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
+          Ao acessar, você concorda com nossos{' '}
+          <a
+            href="/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'var(--primary)', textDecoration: 'underline', fontWeight: 600 }}
+          >
+            Termos de Uso e Políticas de Privacidade
+          </a>.
+        </div>
       </div>
     </div>
   );
