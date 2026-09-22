@@ -4,6 +4,7 @@ import logoImg from '../../assets/logo.png';
 import {
   LayoutDashboard,
   ShieldCheck,
+  ShieldAlert,
   Users,
   Film,
   AlertTriangle,
@@ -27,6 +28,7 @@ export type DashboardTab =
   | 'settings'
   | 'banners'
   | 'moderation'
+  | 'moderation_rejections'
   | 'financial'
   | 'stores';
 
@@ -146,6 +148,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {pendingModerationCount}
             </span>
           )}
+        </a>
+        <a
+          onClick={() => {
+            setActiveTab('moderation_rejections');
+            setMobileSidebarOpen(false);
+          }}
+          className={`nav-item ${activeTab === 'moderation_rejections' ? 'active' : ''}`}
+        >
+          <ShieldAlert size={18} />
+          Moderação
         </a>
         <a
           onClick={() => {

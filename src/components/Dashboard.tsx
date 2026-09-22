@@ -20,7 +20,7 @@ import logoImg from '../assets/logo.png';
 import ImageCropperModal from './ImageCropperModal';
 import { VerificationBadgeAdmin, LEVEL_CONFIG } from './users/VerificationBadgeAdmin';
 import { VerificationLevelSelect } from './users/VerificationLevelSelect';
-import { Sidebar } from './dashboard/Sidebar';
+import { Sidebar, DashboardTab } from './dashboard/Sidebar';
 import { Header } from './dashboard/Header';
 import { OverviewTab } from './dashboard/tabs/OverviewTab';
 import { UsersTab } from './dashboard/tabs/UsersTab';
@@ -30,6 +30,7 @@ import { StoriesTab } from './dashboard/tabs/StoriesTab';
 import { ReportsTab } from './dashboard/tabs/ReportsTab';
 import { BannersTab } from './dashboard/tabs/BannersTab';
 import { ModerationTab } from './dashboard/tabs/ModerationTab';
+import { ModerationRejectionsTab } from './dashboard/tabs/ModerationRejectionsTab';
 import { FinancialTab } from './dashboard/tabs/FinancialTab';
 import { SettingsTab, SettingsSubTab } from './dashboard/tabs/SettingsTab';
 import { StoresTab } from './dashboard/tabs/StoresTab';
@@ -714,7 +715,7 @@ interface DashboardProps {
 
 export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
   const { success, error, warning, info } = useToast();
-  const [activeTab, setActiveTab] = useState<'overview' | 'selo' | 'users' | 'works' | 'stories' | 'reports' | 'settings' | 'banners' | 'moderation' | 'financial' | 'stores'>('overview');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Custom Hooks & Notification Settings
@@ -2678,7 +2679,12 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
               moderationItemsPerPage={moderationItemsPerPage}
               currentPage={currentPage}
               setCurrentPage={setCurrentPage}
+              onNavigateToRejections={() => setActiveTab('moderation_rejections')}
             />
+          )}
+
+          {activeTab === 'moderation_rejections' && (
+            <ModerationRejectionsTab />
           )}
 
           {activeTab === 'banners' && (
