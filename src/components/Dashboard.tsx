@@ -2861,6 +2861,47 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                           {user.status}
                         </span>
                       </div>
+
+                      {/* Área de Cobertura para Serviços (Visão Rápida) */}
+                      {isProfessional && (
+                        <div style={{ marginTop: '4px', paddingTop: '10px', borderTop: '1px solid var(--border-light)' }}>
+                          <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10px', textTransform: 'uppercase', fontWeight: 600, marginBottom: '6px' }}>
+                            <Globe size={12} style={{ color: 'var(--primary)' }} /> Área de Cobertura
+                          </span>
+                          {(() => {
+                            const covRaw = user.professional_coverages;
+                            const cov = Array.isArray(covRaw) ? covRaw[0] : covRaw;
+                            if (!cov) {
+                              return <span style={{ color: 'var(--text-muted)', fontSize: '12px', fontStyle: 'italic' }}>Não cadastrada</span>;
+                            }
+                            if (cov.nationwide) {
+                              return (
+                                <span className="badge badge-success" style={{ fontSize: '11px', textTransform: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  <Globe size={11} /> Todo o Brasil (Nacional)
+                                </span>
+                              );
+                            }
+                            const stList = (cov.states || []).map((s: any) => (typeof s === 'object' && s !== null ? (s.state_code || s.name) : s));
+                            const ctList = cov.cities || [];
+                            if (stList.length === 0 && ctList.length === 0) {
+                              return <span style={{ color: 'var(--text-muted)', fontSize: '12px', fontStyle: 'italic' }}>Restrita à cidade base</span>;
+                            }
+                            return (
+                              <div style={{ fontSize: '12px', color: 'var(--text-main)', lineHeight: 1.4 }}>
+                                <strong style={{ color: 'var(--primary)' }}>{stList.length} UF(s) atendida(s)</strong>
+                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                  {stList.join(', ')}
+                                </div>
+                                {ctList.length > 0 && (
+                                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                    {ctList.length} cidade(s) específica(s)
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
                     </div>
 
                     {/* Motivo do Bloqueio */}
@@ -3108,7 +3149,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                               <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>Regiões geográficas onde o profissional está disponível para trabalhar.</p>
 
                               {(() => {
-                                const coverage = user.professional_coverages?.[0];
+                                const coverageRaw = user.professional_coverages;
+                                const coverage = Array.isArray(coverageRaw) ? coverageRaw[0] : coverageRaw;
                                 if (!coverage) {
                                   return <p style={{ fontSize: '14px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Nenhuma área de cobertura cadastrada.</p>;
                                 }
@@ -3134,20 +3176,22 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
                                 return (
                                   <div>
-                                    {states.map((st: string) => {
-                                      const stateCities = cities.filter((c: any) => c.state === st);
+                                    {states.map((stItem: any, idx: number) => {
+                                      const stName = typeof stItem === 'object' && stItem !== null ? stItem.name : stItem;
+                                      const stCode = typeof stItem === 'object' && stItem !== null ? stItem.state_code : stItem;
+                                      const stateCities = cities.filter((c: any) => c.state === stName || c.state === stCode || c.state_code === stCode);
                                       const isEntireState = stateCities.length === 0;
 
                                       return (
-                                        <div key={st} className="coverage-state-group">
+                                        <div key={stCode || stName || idx} className="coverage-state-group">
                                           <div className="coverage-state-header">
-                                            Estado de {st} · {isEntireState ? 'Estado Inteiro' : 'Cidades Selecionadas'}
+                                            Estado de {stName || stCode} · {isEntireState ? 'Estado Inteiro' : 'Cidades Selecionadas'}
                                           </div>
                                           {!isEntireState ? (
                                             <div className="coverage-cities-row">
-                                              {stateCities.map((ct: any) => (
-                                                <span key={ct.city_id} className="coverage-city-chip">
-                                                  {ct.city_name}
+                                              {stateCities.map((ct: any, cIdx: number) => (
+                                                <span key={ct.city_id || ct.id || cIdx} className="coverage-city-chip">
+                                                  {ct.city_name || ct.name}
                                                 </span>
                                               ))}
                                             </div>
