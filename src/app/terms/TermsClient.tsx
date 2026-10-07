@@ -450,6 +450,22 @@ export default function TermsClient() {
                     <li>Solicitar a anonimização, bloqueio ou eliminação de dados desnecessários;</li>
                     <li>Revogar o consentimento ou pedir exclusão definitiva de sua conta.</li>
                   </ul>
+                  <div style={{ marginTop: '16px' }}>
+                    <Link
+                      href="/delete-account"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '13px',
+                        color: 'var(--danger)',
+                        fontWeight: 700,
+                        textDecoration: 'underline'
+                      }}
+                    >
+                      Acesse aqui a página pública de exclusão de conta e dados pessoais →
+                    </Link>
+                  </div>
                 </section>
 
                 <section id="dpo-contato">

@@ -67,6 +67,61 @@ export const moderationService = {
     return data || [];
   },
 
+  async getRejectedItems() {
+    const [bannersResult, storiesResult] = await Promise.all([
+      supabase
+        .from('banners')
+        .select('*, users(name, email, phone)')
+        .eq('status', 'rejected')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('story_items')
+        .select(`
+          *,
+          story_channels!inner (
+            id,
+            name,
+            avatar_url,
+            user_id,
+            scope,
+            country,
+            state,
+            city,
+            users (
+              name,
+              email,
+              phone
+            )
+          )
+        `)
+        .eq('status', 'rejected')
+        .order('created_at', { ascending: false }),
+    ]);
+
+    if (bannersResult.error) {
+      console.error('[moderationService] Erro ao buscar banners recusados:', bannersResult.error);
+    }
+    if (storiesResult.error) {
+      console.error('[moderationService] Erro ao buscar stories recusados:', storiesResult.error);
+    }
+
+    const banners = (bannersResult.data || []).map((b: any) => ({
+      ...b,
+      _type: 'banner' as const,
+      rejected_at: b.updated_at || b.created_at,
+    }));
+
+    const stories = (storiesResult.data || []).map((s: any) => ({
+      ...s,
+      _type: 'story' as const,
+      rejected_at: s.updated_at || s.created_at,
+    }));
+
+    return [...banners, ...stories].sort(
+      (a, b) => new Date(b.rejected_at || b.created_at).getTime() - new Date(a.rejected_at || a.created_at).getTime()
+    );
+  },
+
   async acceptRequest(params: {
     type: 'banner' | 'story';
     id: string;

@@ -24,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setMobileSidebarOpen 
           {activeTab === 'banners' && 'Banners'}
           {activeTab === 'reports' && 'Denúncias'}
           {activeTab === 'moderation' && 'Solicitações de Anúncios'}
+          {activeTab === 'moderation_rejections' && 'Moderação de Anúncios (Recusas)'}
           {activeTab === 'settings' && 'Configurações do Sistema'}
           {activeTab === 'financial' && 'Financeiro'}
         </h2>

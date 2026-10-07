@@ -14,6 +14,7 @@ interface ModerationTabProps {
   moderationItemsPerPage: number;
   currentPage: number;
   setCurrentPage: (page: number | ((prev: number) => number)) => void;
+  onNavigateToRejections?: () => void;
 }
 
 export const ModerationTab: React.FC<ModerationTabProps> = ({
@@ -27,10 +28,46 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({
   startModerationIndex,
   moderationItemsPerPage,
   currentPage,
-  setCurrentPage
+  setCurrentPage,
+  onNavigateToRejections
 }) => {
   return (
     <div>
+      {/* Banner de Direcionamento para Central de Moderação */}
+      {onNavigateToRejections && (
+        <div
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--border-light)',
+            borderRadius: 'var(--radius-md)',
+            padding: '12px 18px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: 'var(--shadow-sm)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '18px' }}>🛡️</span>
+            <div>
+              <strong style={{ fontSize: '13px', display: 'block' }}>Central de Moderação & Recusas</strong>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Todas as solicitações recusadas (manualmente ou por segurança) estão centralizadas na nova tela de Moderação.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={onNavigateToRejections}
+            style={{ fontWeight: 600, fontSize: '12px', whiteSpace: 'nowrap' }}
+          >
+            Acessar Moderação →
+          </button>
+        </div>
+      )}
+
       {/* Filters Bar */}
       <div className="filters-bar">
         <div className="filters-group">
