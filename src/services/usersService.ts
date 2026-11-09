@@ -41,6 +41,40 @@ function formatUserRecord(u: any) {
   };
 }
 
+async function executeDirectClientUpdate(userId: string, payload: Record<string, any>): Promise<boolean> {
+  try {
+    const [upRes, uRes] = await Promise.all([
+      (supabase.from('user_profiles') as any).update(payload).eq('user_id', userId).select(),
+      (supabase.from('users') as any).update(payload).eq('id', userId).select(),
+    ]);
+    return Boolean((upRes.data && upRes.data.length > 0) || (uRes.data && uRes.data.length > 0));
+  } catch (err) {
+    console.warn('[usersService] Aviso na atualização direta via client:', err);
+    return false;
+  }
+}
+
+async function executeApiVerificationSync(userId: string, verificationLevel?: VerificationLevelEnum, isSuspended?: boolean) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData?.session?.access_token;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch('/api/admin/users/update-verification', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ userId, verificationLevel, isSuspended }),
+  });
+
+  const resData = await response.json();
+  if (!response.ok || resData.error) {
+    throw new Error(resData.error || 'Falha ao atualizar dados de verificação.');
+  }
+  return resData.data;
+}
+
 export const usersService = {
   async getUsers(params: {
     page: number;
@@ -89,17 +123,29 @@ export const usersService = {
   },
 
   async updateUserVerification(userId: string, verificationLevel?: VerificationLevelEnum, isSuspended?: boolean) {
-    const response = await fetch('/api/admin/users/update-verification', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, verificationLevel, isSuspended }),
-    });
+    const updatePayload: Record<string, any> = {
+      verification_updated_at: new Date().toISOString(),
+    };
 
-    const resData = await response.json();
-    if (!response.ok || resData.error) {
-      throw new Error(resData.error || 'Falha ao atualizar dados de verificação do usuário.');
+    if (verificationLevel !== undefined) {
+      updatePayload.verification_level = verificationLevel;
     }
-    return resData.data;
+
+    if (isSuspended !== undefined) {
+      updatePayload.is_suspended = isSuspended;
+    }
+
+    const clientSuccess = await executeDirectClientUpdate(userId, updatePayload);
+
+    try {
+      const apiData = await executeApiVerificationSync(userId, verificationLevel, isSuspended);
+      return apiData;
+    } catch (err: any) {
+      if (clientSuccess) {
+        return { id: userId, ...updatePayload };
+      }
+      throw err;
+    }
   },
 
   async getUserDetails(userId: string) {

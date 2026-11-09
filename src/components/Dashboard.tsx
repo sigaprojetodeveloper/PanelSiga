@@ -19,7 +19,7 @@ import { Country, State, City } from 'country-state-city';
 import logoImg from '../assets/logo.png';
 import ImageCropperModal from './ImageCropperModal';
 import { VerificationBadgeAdmin, LEVEL_CONFIG } from './users/VerificationBadgeAdmin';
-import { VerificationLevelSelect } from './users/VerificationLevelSelect';
+import { ChangeVerificationLevelModal } from './dashboard/modals/ChangeVerificationLevelModal';
 import { Sidebar, DashboardTab } from './dashboard/Sidebar';
 import { Header } from './dashboard/Header';
 import { OverviewTab } from './dashboard/tabs/OverviewTab';
@@ -918,6 +918,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
 
   // Modals state
   const [userModalOpen, setUserModalOpen] = useState(false);
+  const [changeLevelModalOpen, setChangeLevelModalOpen] = useState(false);
   const [selectedUserTab, setSelectedUserTab] = useState<'portfolio' | 'specialties' | 'location' | 'contacts' | 'works'>('portfolio');
   const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<any | null>(null);
   const [lightboxMainImage, setLightboxMainImage] = useState<string | null>(null);
@@ -2825,17 +2826,19 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                         <strong style={{ color: 'var(--text-main)' }}>{user.role_flags?.join(' & ') || 'Nenhum'}</strong>
                       </div>
                       {/* Selo Siga Check */}
-                      <div style={{ padding: '10px', backgroundColor: 'var(--bg-app)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <span style={{ color: 'var(--text-muted)', fontSize: '10px', textTransform: 'uppercase', fontWeight: 600 }}>Selo Siga Check</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
                           <VerificationBadgeAdmin level={user.verification_level || 'none'} isSuspended={Boolean(user.is_suspended)} />
-                        </div>
-                        <div style={{ marginTop: '4px' }}>
-                          <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Alterar Nível</label>
-                          <VerificationLevelSelect
-                            currentLevel={user.verification_level || 'none'}
-                            onChange={(newLevel: any) => userHook.updateVerificationLevel(user.id, newLevel)}
-                          />
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setChangeLevelModalOpen(true)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '6px 12px' }}
+                          >
+                            <Award size={14} />
+                            Alterar Nível
+                          </button>
                         </div>
                       </div>
 
@@ -3341,6 +3344,20 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ================= MODAL: CHANGE VERIFICATION LEVEL ================= */}
+      {userHook.selectedUser && (
+        <ChangeVerificationLevelModal
+          isOpen={changeLevelModalOpen}
+          onClose={() => setChangeLevelModalOpen(false)}
+          currentLevel={userHook.selectedUser.verification_level || 'none'}
+          userName={userHook.selectedUser.name}
+          userEmail={userHook.selectedUser.email}
+          onSave={async (newLevel) => {
+            await userHook.updateVerificationLevel(userHook.selectedUser.id, newLevel);
+          }}
+        />
       )}
 
       {/* ================= MODAL: PORTFOLIO LIGHTBOX ================= */}
