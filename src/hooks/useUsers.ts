@@ -84,13 +84,23 @@ export function useUsers() {
         prev.map((u) => (u.id === userId ? { ...u, verification_level: level, verification_updated_at: new Date().toISOString() } : u))
       );
       if (selectedUser && selectedUser.id === userId) {
-        setSelectedUser((prev: any) =>
-          prev ? { ...prev, verification_level: level, verification_updated_at: new Date().toISOString() } : null
-        );
+        setSelectedUser((prev: any) => {
+          if (!prev) return null;
+          const updatedProfiles = Array.isArray(prev.user_profiles)
+            ? prev.user_profiles.map((p: any) => ({ ...p, verification_level: level, verification_updated_at: new Date().toISOString() }))
+            : (prev.user_profiles ? { ...prev.user_profiles, verification_level: level, verification_updated_at: new Date().toISOString() } : prev.user_profiles);
+          return {
+            ...prev,
+            verification_level: level,
+            verification_updated_at: new Date().toISOString(),
+            user_profiles: updatedProfiles,
+          };
+        });
       }
       success(`Nível de verificação atualizado para ${level.toUpperCase()}!`);
     } catch (err: any) {
       error('Falha ao atualizar nível de verificação: ' + err.message);
+      throw err;
     }
   };
 
@@ -101,9 +111,18 @@ export function useUsers() {
         prev.map((u) => (u.id === userId ? { ...u, is_suspended: isSuspended, verification_updated_at: new Date().toISOString() } : u))
       );
       if (selectedUser && selectedUser.id === userId) {
-        setSelectedUser((prev: any) =>
-          prev ? { ...prev, is_suspended: isSuspended, verification_updated_at: new Date().toISOString() } : null
-        );
+        setSelectedUser((prev: any) => {
+          if (!prev) return null;
+          const updatedProfiles = Array.isArray(prev.user_profiles)
+            ? prev.user_profiles.map((p: any) => ({ ...p, is_suspended: isSuspended, verification_updated_at: new Date().toISOString() }))
+            : (prev.user_profiles ? { ...prev.user_profiles, is_suspended: isSuspended, verification_updated_at: new Date().toISOString() } : prev.user_profiles);
+          return {
+            ...prev,
+            is_suspended: isSuspended,
+            verification_updated_at: new Date().toISOString(),
+            user_profiles: updatedProfiles,
+          };
+        });
       }
       success(isSuspended ? 'Usuário suspenso! Selo ocultado na plataforma.' : 'Suspensão removida!');
     } catch (err: any) {

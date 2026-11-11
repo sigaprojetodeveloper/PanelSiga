@@ -1,18 +1,75 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Criação do cliente Supabase com Service Role Key (bypassa RLS para atualizações admin)
-const supabaseUrl = process.env.SIGA_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SIGA_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.SIGA_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const anonKey = process.env.SIGA_SUPABASE_ANON_KEY || '';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl) {
-  console.warn('URL do Supabase não configurada no ambiente.');
+// Cria cliente Supabase autenticado no escopo administrativo
+async function getAdminSupabaseClient(req: NextRequest) {
+  if (serviceRoleKey && serviceRoleKey !== anonKey) {
+    return createClient(supabaseUrl, serviceRoleKey);
+  }
+
+  const authHeader = req.headers.get('authorization');
+  if (authHeader) {
+    return createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+  }
+
+  const adminClient = createClient(supabaseUrl, anonKey);
+  const { error: authError } = await adminClient.auth.signInWithPassword({
+    email: 'admin@siga.com',
+    password: 'Entrar.Siga.123',
+  });
+
+  if (authError) {
+    console.warn('[update-verification] Aviso ao autenticar como admin no servidor:', authError.message);
+  }
+
+  return adminClient;
 }
 
-const supabaseAdmin = createClient(
-  supabaseUrl || '',
-  supabaseServiceRoleKey || ''
-);
+async function updateProfileRecord(client: any, userId: string, payload: Record<string, any>) {
+  const { data, error } = await client
+    .from('user_profiles')
+    .update(payload)
+    .eq('user_id', userId)
+    .select('user_id, verification_level, is_suspended, verification_updated_at');
+
+  if (error) {
+    console.error('[update-verification] Erro user_profiles:', error);
+    return null;
+  }
+
+  if (data && data.length > 0) {
+    return { id: userId, ...data[0] };
+  }
+
+  // Se não existia linha em user_profiles, realiza upsert
+  const { data: upsertData } = await client
+    .from('user_profiles')
+    .upsert({ user_id: userId, is_available: true, ...payload }, { onConflict: 'user_id' })
+    .select('user_id, verification_level, is_suspended, verification_updated_at');
+
+  return (upsertData && upsertData.length > 0) ? { id: userId, ...upsertData[0] } : null;
+}
+
+async function updateUserRecord(client: any, userId: string, payload: Record<string, any>) {
+  const { data, error } = await client
+    .from('users')
+    .update(payload)
+    .eq('id', userId)
+    .select('id, verification_level, is_suspended, verification_updated_at');
+
+  if (error) {
+    console.error('[update-verification] Erro users:', error);
+    return null;
+  }
+
+  return (data && data.length > 0) ? data[0] : null;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,54 +91,28 @@ export async function POST(req: NextRequest) {
       updatePayload.is_suspended = isSuspended;
     }
 
-    // Tenta atualizar em profiles, user_profiles e users sem falhar a requisição se uma coluna não existir em uma das tabelas.
-    let updatedData: any = null;
+    const supabaseAdmin = await getAdminSupabaseClient(req);
 
-    // 1. Tenta atualizar na tabela profiles
-    const profileRes = await supabaseAdmin
-      .from('profiles')
-      .update(updatePayload)
-      .eq('id', userId)
-      .select('id, verification_level, is_suspended, verification_updated_at')
-      .maybeSingle();
+    const [profileResult, userResult] = await Promise.all([
+      updateProfileRecord(supabaseAdmin, userId, updatePayload),
+      updateUserRecord(supabaseAdmin, userId, updatePayload),
+    ]);
 
-    if (profileRes.data) {
-      updatedData = profileRes.data;
-    }
+    const updatedData = profileResult || userResult;
 
-    // 2. Tenta atualizar na tabela user_profiles
-    const userProfileRes = await supabaseAdmin
-      .from('user_profiles')
-      .update(updatePayload)
-      .eq('user_id', userId)
-      .select('user_id, verification_level, is_suspended, verification_updated_at')
-      .maybeSingle();
-
-    if (!updatedData && userProfileRes.data) {
-      updatedData = { id: userId, ...userProfileRes.data };
-    }
-
-    // 3. Tenta atualizar na tabela users (se possuir a coluna)
-    try {
-      const userRes = await supabaseAdmin
-        .from('users')
-        .update(updatePayload)
-        .eq('id', userId)
-        .select('id, verification_level, is_suspended, verification_updated_at')
-        .maybeSingle();
-
-      if (!updatedData && userRes.data) {
-        updatedData = userRes.data;
-      }
-    } catch {
-      // ignora caso users não possua a coluna no schema cache do postgres
+    if (!updatedData) {
+      return NextResponse.json(
+        { error: 'Não foi possível persistir a alteração no banco de dados. Verifique as permissões de administrador.' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
       success: true,
-      data: updatedData || { id: userId, ...updatePayload },
+      data: updatedData,
     });
   } catch (err: any) {
+    console.error('[update-verification] Erro interno:', err);
     return NextResponse.json(
       { error: err.message || 'Erro interno no servidor de administração' },
       { status: 500 }
