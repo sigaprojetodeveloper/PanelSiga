@@ -1910,7 +1910,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
         await storyHook.updateChannel(editChannelId, channelData);
         success('Canal atualizado com sucesso!');
       } else {
-        await storyHook.createChannel({ ...channelData, is_active: true });
+        await storyHook.createChannel({ ...channelData, is_active: true, status: 'active' });
         success('Canal criado com sucesso!');
       }
     } catch (err: any) {

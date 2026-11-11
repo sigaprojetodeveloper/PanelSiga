@@ -4,6 +4,9 @@ import type { Database } from '../types/database.types';
 type Channel = Database['public']['Tables']['story_channels']['Row'];
 type StoryItem = Database['public']['Tables']['story_items']['Row'];
 
+const INACTIVE_CHANNEL_STATUSES = ['deactivated', 'deleted', 'rejected', 'pending', 'awaiting_payment', 'expired'];
+const BLOCKED_AUTO_ACTIVATE_STATUSES = ['deleted', 'rejected', 'awaiting_payment'];
+
 const getTodayStr = () => {
   const d = new Date();
   const year = d.getFullYear();
@@ -11,6 +14,44 @@ const getTodayStr = () => {
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
+
+/**
+ * Checks whether a story item is active and has not expired relative to today's date.
+ */
+function isActiveNonExpiredStory(story: Pick<StoryItem, 'status' | 'expiration_date'>): boolean {
+  if (story.status !== 'active') return false;
+  const expDateStr = String(story.expiration_date || '').slice(0, 10);
+  return expDateStr >= getTodayStr();
+}
+
+/**
+ * Activates an eligible inactive story channel when a new active story is created for it.
+ * Preserves moderation/payment/deletion locks on user-owned or blocked channels.
+ */
+async function activateChannelOnNewStory(channelId: string): Promise<void> {
+  const { data: channel, error: channelError } = await (supabase
+    .from('story_channels') as any)
+    .select('is_active, status, user_id')
+    .eq('id', channelId)
+    .single();
+
+  if (channelError) throw channelError;
+  if (!channel) return;
+
+  const isPendingUserChannel = channel.status === 'pending' && Boolean(channel.user_id);
+  if (BLOCKED_AUTO_ACTIVATE_STATUSES.includes(channel.status) || isPendingUserChannel) {
+    return;
+  }
+
+  const needsActivation = !channel.is_active || INACTIVE_CHANNEL_STATUSES.includes(channel.status);
+  if (!needsActivation) return;
+
+  const { error: updateError } = await (supabase.from('story_channels') as any)
+    .update({ status: 'active', is_active: true })
+    .eq('id', channelId);
+
+  if (updateError) throw updateError;
+}
 
 export const storiesService = {
   // === Sincronização de Canais ===
@@ -34,9 +75,8 @@ export const storiesService = {
       
     if (channelError) throw channelError;
     
-    const inactiveStatuses = ['deactivated', 'deleted', 'rejected', 'pending', 'awaiting_payment', 'expired'];
     let shouldBeActive = activeStories && activeStories.length > 0;
-    if (inactiveStatuses.includes(channel?.status)) {
+    if (INACTIVE_CHANNEL_STATUSES.includes(channel?.status)) {
       shouldBeActive = false;
     }
     
@@ -67,11 +107,10 @@ export const storiesService = {
     if (storiesError) throw storiesError;
     
     const activeChannelIds = new Set(activeStories?.map((item: any) => item.channel_id) || []);
-    const inactiveStatuses = ['deactivated', 'deleted', 'rejected', 'pending', 'awaiting_payment', 'expired'];
     
     for (const channel of (channels as any[])) {
       let shouldBeActive = activeChannelIds.has(channel.id);
-      if (inactiveStatuses.includes(channel.status)) {
+      if (INACTIVE_CHANNEL_STATUSES.includes(channel.status)) {
         shouldBeActive = false;
       }
       if (channel.is_active !== shouldBeActive) {
@@ -173,6 +212,9 @@ export const storiesService = {
 
     if (error) throw error;
     try {
+      if (isActiveNonExpiredStory(data)) {
+        await activateChannelOnNewStory(item.channel_id);
+      }
       await this.syncChannelStatus(item.channel_id);
     } catch (syncErr) {
       console.error('Error syncing channel status after insert:', syncErr);
