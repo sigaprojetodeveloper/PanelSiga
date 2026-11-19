@@ -35,6 +35,7 @@ import { FinancialTab } from './dashboard/tabs/FinancialTab';
 import { SettingsTab, SettingsSubTab } from './dashboard/tabs/SettingsTab';
 import { StoresTab } from './dashboard/tabs/StoresTab';
 import { ReportDetailsModal } from './dashboard/modals/ReportDetailsModal';
+import { extractDateOnly, formatDateOnlyBR } from './dashboard/utils';
 import {
   LayoutDashboard,
   Users,
@@ -551,10 +552,10 @@ function HistoricalBannerCard({
             <MapPin size={10} /> Abrangência: {banner.scope === 'global' ? 'Global' : banner.scope === 'national' ? `Nacional (${banner.country || 'Brasil'})` : banner.scope === 'state' ? `Estadual (${banner.state || ''})` : banner.scope === 'city' ? `Municipal (${banner.city || ''}/${banner.state || ''})` : banner.scope || 'Global'}
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Calendar size={10} /> Início: {new Date(banner.initialization_date).toLocaleDateString()}
+            <Calendar size={10} /> Início: {formatDateOnlyBR(banner.initialization_date)}
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Calendar size={10} /> Expira em: {new Date(banner.expiration_date).toLocaleDateString()}
+            <Calendar size={10} /> Expira em: {formatDateOnlyBR(banner.expiration_date)}
           </span>
         </div>
       </div>
@@ -1954,7 +1955,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     setNewStoryLinkCustomRoute(parsed.customRoute);
 
     setNewStoryLinkLabel(item.link_label || '');
-    setNewStoryExpiration(item.expiration_date);
+    setNewStoryExpiration(extractDateOnly(item.expiration_date));
     setAddStoryModalOpen(true);
   };
 
@@ -1966,7 +1967,8 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
     }
 
     const todayStr = getTodayStr();
-    if (newStoryExpiration < todayStr) {
+    const normalizedExpiration = extractDateOnly(newStoryExpiration);
+    if (normalizedExpiration < todayStr) {
       warning('A data de expiração não pode ser anterior à data de hoje.');
       return;
     }
@@ -1990,7 +1992,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
       link_url: assembledLink,
       link_label: finalLabel,
       status: 'active' as 'active' | 'expired',
-      expiration_date: newStoryExpiration
+      expiration_date: normalizedExpiration
     };
 
     try {
@@ -1999,7 +2001,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
         await storyHook.refetch();
         success('Story atualizado com sucesso!');
       } else {
-        await storyHook.createItem(itemData);
+        await storyHook.createItem({ ...itemData, initialization_date: todayStr });
         success('Story publicado com sucesso!');
       }
       setAddStoryModalOpen(false);
@@ -4485,7 +4487,7 @@ export default function Dashboard({ onLogout, adminUsername }: DashboardProps) {
                     <span className="value" style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-main)' }}>
                       {(() => {
                         const { start, end } = getAdDates(selectedModerationItem, selectedModerationType);
-                        return `${start ? new Date(start).toLocaleDateString('pt-BR') : '-'} até ${end ? new Date(end).toLocaleDateString('pt-BR') : '-'}`;
+                        return `${formatDateOnlyBR(start)} até ${formatDateOnlyBR(end)}`;
                       })()}
                     </span>
                   </div>

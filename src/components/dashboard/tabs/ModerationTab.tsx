@@ -1,6 +1,6 @@
 /* eslint-disable complexity, @next/next/no-img-element */
 import React from 'react';
-import { getAdDates } from '../utils';
+import { getAdDates, formatDateOnlyBR } from '../utils';
 
 interface ModerationTabProps {
   moderationHook: any;
@@ -311,7 +311,7 @@ export const ModerationTab: React.FC<ModerationTabProps> = ({
                       </td>
                       <td>
                         <span style={{ fontSize: '13px' }}>
-                          {start ? new Date(start).toLocaleDateString('pt-BR') : '-'} até {end ? new Date(end).toLocaleDateString('pt-BR') : '-'}
+                          {formatDateOnlyBR(start)} até {formatDateOnlyBR(end)}
                         </span>
                       </td>
                     </tr>

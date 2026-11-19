@@ -16,6 +16,13 @@ const getTodayStr = () => {
 };
 
 /**
+ * Normalizes a calendar date or ISO timestamp string to YYYY-MM-DD without timezone shifts.
+ */
+function normalizeDateOnly(dateStr: string): string {
+  return String(dateStr || '').trim().slice(0, 10);
+}
+
+/**
  * Checks whether a story item is active and has not expired relative to today's date.
  */
 function isActiveNonExpiredStory(story: Pick<StoryItem, 'status' | 'expiration_date'>): boolean {
@@ -63,6 +70,7 @@ export const storiesService = {
       .select('id')
       .eq('channel_id', channelId)
       .eq('status', 'active')
+      .or(`initialization_date.is.null,initialization_date.lte.${todayStr}`)
       .gte('expiration_date', todayStr);
       
     if (storiesError) throw storiesError;
@@ -102,6 +110,7 @@ export const storiesService = {
       .from('story_items')
       .select('channel_id')
       .eq('status', 'active')
+      .or(`initialization_date.is.null,initialization_date.lte.${todayStr}`)
       .gte('expiration_date', todayStr) as any;
       
     if (storiesError) throw storiesError;
@@ -205,8 +214,16 @@ export const storiesService = {
   },
 
   async createStoryItem(item: Omit<StoryItem, 'id' | 'created_at'>) {
+    const payload = {
+      ...item,
+      initialization_date: item.initialization_date
+        ? normalizeDateOnly(item.initialization_date)
+        : getTodayStr(),
+      expiration_date: normalizeDateOnly(item.expiration_date),
+    };
+
     const { data, error } = await (supabase.from('story_items') as any)
-      .insert(item)
+      .insert(payload)
       .select()
       .single();
 
@@ -223,8 +240,16 @@ export const storiesService = {
   },
 
   async updateStoryItem(id: string, updates: Partial<Omit<StoryItem, 'id' | 'created_at'>>) {
+    const normalizedUpdates = { ...updates };
+    if (normalizedUpdates.expiration_date !== undefined) {
+      normalizedUpdates.expiration_date = normalizeDateOnly(normalizedUpdates.expiration_date);
+    }
+    if (normalizedUpdates.initialization_date !== undefined) {
+      normalizedUpdates.initialization_date = normalizeDateOnly(normalizedUpdates.initialization_date);
+    }
+
     const { data, error } = await (supabase.from('story_items') as any)
-      .update(updates)
+      .update(normalizedUpdates)
       .eq('id', id)
       .select()
       .single();
