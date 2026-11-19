@@ -2,7 +2,7 @@
 import React from 'react';
 import { Country, State } from 'country-state-city';
 import { Plus, Eye, Link as LinkIcon, Calendar, Trash2, Edit2, MapPin } from 'lucide-react';
-import { getTodayStr } from '../utils';
+import { getTodayStr, extractDateOnly, formatDateOnlyBR } from '../utils';
 import { useToast } from '../../../hooks/useToast';
 
 interface ChannelRowProps {
@@ -26,7 +26,7 @@ export function ChannelRow({
 }: ChannelRowProps) {
   const activeCount = (ch.story_items || []).filter((item: any) =>
     item.status === 'active' &&
-    item.expiration_date >= getTodayStr()
+    extractDateOnly(item.expiration_date) >= getTodayStr()
   ).length;
 
   return (
@@ -420,7 +420,8 @@ export const StoriesTab: React.FC<StoriesTabProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '16px' }}>
               {storyHook.items.map((item: any) => {
                 const todayStr = getTodayStr();
-                const isExpired = item.expiration_date < todayStr;
+                const isDateExpired = extractDateOnly(item.expiration_date) < todayStr;
+                const isExpired = item.status === 'expired' || isDateExpired;
 
                 return (
                   <div
@@ -522,12 +523,12 @@ export const StoriesTab: React.FC<StoriesTabProps> = ({
                         </a>
                       )}
                       <span style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Calendar size={10} /> Expira em: {new Date(item.expiration_date).toLocaleDateString()}
+                        <Calendar size={10} /> Expira em: {formatDateOnlyBR(item.expiration_date)}
                       </span>
                     </div>
 
                     <div style={{ display: 'flex', borderTop: '1px solid var(--border-light)' }}>
-                      {!(isExpired && item.status !== 'active') ? (
+                      {!(isDateExpired && item.status !== 'active') ? (
                         <>
                           <button
                             onClick={() => handleExpireStoryClick(item)}

@@ -6,6 +6,32 @@ export const getTodayStr = () => {
   return `${year}-${month}-${day}`;
 };
 
+/**
+ * Extracts the leading YYYY-MM-DD calendar date without UTC/local timezone conversion.
+ */
+export const extractDateOnly = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return '';
+  const match = String(dateStr).trim().match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : '';
+};
+
+/**
+ * Formats a YYYY-MM-DD (or ISO timestamp) date string as DD/MM/YYYY without timezone shift.
+ */
+export const formatDateOnlyBR = (
+  dateStr: string | null | undefined,
+  fallback = '-'
+): string => {
+  const isoDate = extractDateOnly(dateStr);
+  if (isoDate) {
+    const [year, month, day] = isoDate.split('-');
+    return `${day}/${month}/${year}`;
+  }
+  if (!dateStr) return fallback;
+  const parsed = new Date(dateStr);
+  return Number.isNaN(parsed.getTime()) ? fallback : parsed.toLocaleDateString('pt-BR');
+};
+
 export const decodeBase64 = (str: string): string => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   let decoded = '';

@@ -118,6 +118,7 @@ export interface Database {
           link_url: string | null;
           link_label: string | null;
           status: 'active' | 'expired';
+          initialization_date?: string;
           expiration_date: string;
           created_at: string;
         };

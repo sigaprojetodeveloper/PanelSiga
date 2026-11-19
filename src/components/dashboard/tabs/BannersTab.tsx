@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Country, State } from 'country-state-city';
 import { Plus, Trash2, Link as LinkIcon, MapPin, Calendar } from 'lucide-react';
+import { formatDateOnlyBR } from '../utils';
 
 interface BannersTabProps {
   bannersHook: any;
@@ -168,10 +169,10 @@ export const BannersTab: React.FC<BannersTabProps> = ({
                             <MapPin size={10} /> Abrangência: {banner.scope === 'national' ? `Nacional (${banner.country || 'Brasil'})` : banner.scope === 'state' ? `Estadual (${banner.state || ''})` : banner.scope || 'Nacional'}
                           </span>
                           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Calendar size={10} /> Início: {new Date(banner.initialization_date).toLocaleDateString()}
+                            <Calendar size={10} /> Início: {formatDateOnlyBR(banner.initialization_date)}
                           </span>
                           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Calendar size={10} /> Expira em: {new Date(banner.expiration_date).toLocaleDateString()}
+                            <Calendar size={10} /> Expira em: {formatDateOnlyBR(banner.expiration_date)}
                           </span>
                         </div>
                       </div>
@@ -261,10 +262,10 @@ export const BannersTab: React.FC<BannersTabProps> = ({
                               <MapPin size={10} /> Abrangência: {banner.scope === 'national' ? `Nacional (${banner.country || 'Brasil'})` : banner.scope === 'state' ? `Estadual (${banner.state || ''})` : banner.scope || 'Nacional'}
                             </span>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Calendar size={10} /> Início: {new Date(banner.initialization_date).toLocaleDateString()}
+                              <Calendar size={10} /> Início: {formatDateOnlyBR(banner.initialization_date)}
                             </span>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Calendar size={10} /> Expira em: {new Date(banner.expiration_date).toLocaleDateString()}
+                              <Calendar size={10} /> Expira em: {formatDateOnlyBR(banner.expiration_date)}
                             </span>
                           </div>
                         </div>
